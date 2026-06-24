@@ -26,12 +26,14 @@ tqdm>=4.66
 timm>=0.9.12
 
 # ── HuggingFace / diffusion stack ─────────────────────────────────────────────
-# Versions pinned to match each other — do not upgrade one without the others
-transformers>=4.35.0,<5.0
-huggingface_hub>=0.19.0,<1.0
-diffusers>=0.24.0,<1.0
-accelerate>=0.24.0          # required by diffusers training helpers
-peft>=0.7.0                 # LoRA for UNet (also installed explicitly in job.yaml)
+# Upper bounds are hard: diffusers>=0.28 adds torch.xpu (requires PyTorch 2.4+)
+# and uses a strict version check that rejects PyTorch pre-release strings like
+# 2.1.0a0+32f93b1 (the NGC 23.10 image). Keep the entire stack at Oct-2023 era.
+transformers>=4.35.0,<4.40.0
+huggingface_hub>=0.19.0,<0.24.0
+diffusers>=0.21.0,<0.28.0
+accelerate>=0.24.0,<0.30.0  # required by diffusers training helpers
+peft>=0.6.0,<0.10.0         # LoRA for UNet (also installed explicitly in job.yaml)
 
 # ── Optuna hyperparameter tuning (optional — graceful fallback if absent) ─────
 optuna>=3.4

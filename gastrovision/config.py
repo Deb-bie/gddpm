@@ -239,12 +239,6 @@ HPARAMS = {
         "gamma": args.gamma, "freeze_lr_mult": 5.0,
         "weight_decay": args.weight_decay,
     },
-    "mobile": {
-        "lr": args.lr * 1.5, "freeze_epochs": args.freeze_epochs,
-        "fine_tune_epochs": args.fine_tune_epochs, "batch_size": args.batch_size,
-        "gamma": args.gamma, "freeze_lr_mult": args.freeze_lr_mult,
-        "weight_decay": args.weight_decay,
-    },
     "hybrid_cnn_transformer_v2": {
         "lr": args.lr * 0.67, "freeze_epochs": max(1, args.freeze_epochs - 8),
         "fine_tune_epochs": args.fine_tune_epochs,
