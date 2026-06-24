@@ -1,0 +1,47 @@
+# requirements.txt — GastroVision Tiered Ensemble + Few-Shot Pipeline
+#
+# Base image: nvcr.io/nvidia/pytorch:23.10-py3 (PyTorch 2.1, CUDA 12.2)
+# torch / torchvision are NOT listed here — the job.yaml pins them to the
+# base-image version via PIP_CONSTRAINT so they are never accidentally upgraded.
+#
+# Install order in job.yaml:
+#   1. opencv-python-headless==4.8.1.78  (pinned before this file)
+#   2. pip install -r requirements.txt   (this file)
+#   3. clip / peft / torchmetrics / grad-cam / lpips  (installed after)
+
+# ── Core data / ML ────────────────────────────────────────────────────────────
+numpy>=1.24,<2.0
+pandas>=2.0
+scipy>=1.11
+scikit-learn>=1.3
+Pillow>=10.0
+
+# ── Visualisation ─────────────────────────────────────────────────────────────
+matplotlib>=3.7
+seaborn>=0.12
+tqdm>=4.66
+
+# ── Vision models ─────────────────────────────────────────────────────────────
+# timm >=0.9 required for features_only=True on EfficientNetV2 and Swin-V2
+timm>=0.9.12
+
+# ── HuggingFace / diffusion stack ─────────────────────────────────────────────
+# Versions pinned to match each other — do not upgrade one without the others
+transformers>=4.35.0,<5.0
+huggingface_hub>=0.19.0,<1.0
+diffusers>=0.24.0,<1.0
+accelerate>=0.24.0          # required by diffusers training helpers
+peft>=0.7.0                 # LoRA for UNet (also installed explicitly in job.yaml)
+
+# ── Optuna hyperparameter tuning (optional — graceful fallback if absent) ─────
+optuna>=3.4
+
+# ── Experiment utilities ──────────────────────────────────────────────────────
+# These are already in the job.yaml extras block but listed here so local
+# installs get them too
+grad-cam>=1.4              # pytorch-grad-cam (GradCAM overlays)
+torchmetrics[image]>=1.2   # MS-SSIM diversity metrics
+lpips>=0.1.4               # perceptual similarity
+
+# ── Optional XAI (graceful fallback if install fails) ─────────────────────────
+shap>=0.43
