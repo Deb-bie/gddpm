@@ -233,7 +233,10 @@ HPARAMS = {
         "weight_decay": args.weight_decay,
     },
     "dinov2": {
-        "lr": args.lr * 0.5, "freeze_epochs": args.freeze_epochs,
+        # ViT backbones suffer catastrophic forgetting with high LR on full unfreeze.
+        # Use lr*0.05 (1.5e-5) for fine-tune phase; freeze_lr_mult keeps head LR at
+        # 5*1.5e-5=7.5e-5 during phase 1 which is safe.
+        "lr": args.lr * 0.05, "freeze_epochs": args.freeze_epochs,
         "fine_tune_epochs": args.fine_tune_epochs + 8,
         "batch_size": min(args.batch_size, 16),
         "gamma": args.gamma, "freeze_lr_mult": 5.0,

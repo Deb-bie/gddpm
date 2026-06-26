@@ -190,8 +190,9 @@ def get_model(name: str) -> nn.Module:
 def load_checkpoint(model_name: str, suffix: str = "") -> nn.Module:
     """
     Load a saved checkpoint. suffix examples: '' (baseline), '_aug', '_heavy'.
-    Infers NUM_CLASSES from saved weights when possible.
+    Infers NUM_CLASSES from .meta.json (preferred) or saved weights.
     """
+    import json as _json
     import config
     path = CKPT_DIR / f"sota_{model_name}{suffix}.pt"
     if not path.exists():
@@ -199,16 +200,31 @@ def load_checkpoint(model_name: str, suffix: str = "") -> nn.Module:
 
     state = torch.load(path, map_location=DEVICE)
 
-    # Try to infer NUM_CLASSES from classifier/head weights
-    for key in state:
-        if ("classifier" in key or "head" in key) and "weight" in key:
-            config.NUM_CLASSES = state[key].shape[0]
-            break
+    # 1. Prefer the sidecar metadata file written by train.py
+    meta_path = path.with_suffix(".meta.json")
+    if meta_path.exists():
+        with open(meta_path) as _f:
+            config.NUM_CLASSES = _json.load(_f)["num_classes"]
+    else:
+        # 2. Fall back: find the final Linear output layer.
+        # Must be exactly "classifier.weight" or "head.N.weight" (2-D weight of a
+        # Linear layer, NOT conv_head.weight which is 4-D and would give wrong shape).
+        for key, tensor in state.items():
+            is_linear_weight = (
+                tensor.ndim == 2
+                and "weight" in key
+                and key in ("classifier.weight", "head.weight")
+                or (tensor.ndim == 2 and "weight" in key
+                    and key.startswith("head.") and key.endswith(".weight"))
+            )
+            if is_linear_weight:
+                config.NUM_CLASSES = tensor.shape[0]
+                break
 
     model = get_model(model_name)
     model.load_state_dict(state)
     model.eval()
-    print(f"  Loaded {model_name}{suffix} from {path.name}")
+    print(f"  Loaded {model_name}{suffix} (NUM_CLASSES={config.NUM_CLASSES}) from {path.name}")
     return model
 
 
