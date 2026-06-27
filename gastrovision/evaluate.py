@@ -131,8 +131,8 @@ def save_gradcam(model, model_name: str, loader, n_per_class: int = 5, suffix: s
         from pytorch_grad_cam import GradCAM
         from pytorch_grad_cam.utils.image import show_cam_on_image
         from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
-    except ImportError:
-        print("  GradCAM not installed — skipping")
+    except Exception as _e:
+        print(f"  GradCAM unavailable ({type(_e).__name__}: {_e}) — skipping")
         return
 
     # Select target layer
