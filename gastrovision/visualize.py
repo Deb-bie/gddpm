@@ -25,10 +25,12 @@ import torch
 import torchvision.transforms as T
 from torch.utils.data import DataLoader
 
+import config as _config
 from config import (
     args, DEVICE, IMAGE_ROOT_DIR, OUTPUT_DIR, RESULTS_DIR, SPLITS_DIR,
-    CLASS_NAMES, CLASS_COUNTS, RARE_CLASSES, ULTRA_RARE, NUM_CLASSES,
+    CLASS_NAMES, CLASS_COUNTS,
 )
+# _config.RARE_CLASSES, _config.ULTRA_RARE, _config.NUM_CLASSES are populated after splits — access via _config.X
 from dataset import GastroVisionDataset, build_classifier_transform
 
 
@@ -118,7 +120,7 @@ def plot_comparison_grid(synth_dir=None, n_classes=None, n_cols=3, save_path=Non
     df = pd.read_csv(train_csv)
 
     # Pick classes to display: prefer ultra-rare + a few rare
-    display_classes = list(ULTRA_RARE) + [c for c in RARE_CLASSES if c not in ULTRA_RARE]
+    display_classes = list(_config.ULTRA_RARE) + [c for c in _config.RARE_CLASSES if c not in _config.ULTRA_RARE]
     if n_classes:
         display_classes = display_classes[:n_classes]
     display_classes = [c for c in display_classes if len(df[df["label"] == c]) > 0]
@@ -251,11 +253,11 @@ def plot_per_class_f1(save_path=None):
                color=STRATEGY_COLORS.get(label, f"C{i}"), alpha=0.85)
 
     # Shade rare classes
-    for cls in RARE_CLASSES:
+    for cls in _config.RARE_CLASSES:
         if cls < n_cls:
             ax.axvspan(cls - 0.45, cls + 0.45, alpha=0.08,
                        color="orange", zorder=0)
-    for cls in ULTRA_RARE:
+    for cls in _config.ULTRA_RARE:
         if cls < n_cls:
             ax.axvspan(cls - 0.45, cls + 0.45, alpha=0.12,
                        color="red", zorder=0)
@@ -339,14 +341,14 @@ def plot_tsne(model, model_name: str, csv_path=None, save_path=None,
     emb     = tsne.fit_transform(feats)
 
     fig, ax = plt.subplots(figsize=(12, 10))
-    cmap    = plt.cm.get_cmap("tab20", NUM_CLASSES)
+    cmap    = plt.cm.get_cmap("tab20", _config.NUM_CLASSES)
 
-    for cls in range(NUM_CLASSES):
+    for cls in range(_config.NUM_CLASSES):
         mask   = labels == cls
         if not mask.any():
             continue
-        marker = "^" if cls in ULTRA_RARE else ("s" if cls in RARE_CLASSES else "o")
-        size   = 80 if cls in RARE_CLASSES else 30
+        marker = "^" if cls in _config.ULTRA_RARE else ("s" if cls in _config.RARE_CLASSES else "o")
+        size   = 80 if cls in _config.RARE_CLASSES else 30
         name   = CLASS_NAMES[cls][:15] if cls < len(CLASS_NAMES) else f"c{cls}"
         ax.scatter(emb[mask, 0], emb[mask, 1],
                    c=[cmap(cls)], marker=marker, s=size,

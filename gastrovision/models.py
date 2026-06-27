@@ -200,26 +200,25 @@ def load_checkpoint(model_name: str, suffix: str = "") -> nn.Module:
 
     state = torch.load(path, map_location=DEVICE)
 
-    # 1. Prefer the sidecar metadata file written by train.py
-    meta_path = path.with_suffix(".meta.json")
-    if meta_path.exists():
-        with open(meta_path) as _f:
-            config.NUM_CLASSES = _json.load(_f)["num_classes"]
-    else:
-        # 2. Fall back: find the final Linear output layer.
-        # Must be exactly "classifier.weight" or "head.N.weight" (2-D weight of a
-        # Linear layer, NOT conv_head.weight which is 4-D and would give wrong shape).
-        for key, tensor in state.items():
-            is_linear_weight = (
-                tensor.ndim == 2
-                and "weight" in key
-                and key in ("classifier.weight", "head.weight")
-                or (tensor.ndim == 2 and "weight" in key
-                    and key.startswith("head.") and key.endswith(".weight"))
-            )
-            if is_linear_weight:
-                config.NUM_CLASSES = tensor.shape[0]
-                break
+    # Infer NUM_CLASSES directly from the output layer weight in the checkpoint.
+    # Check exact key names per architecture — avoids matching conv_head or
+    # intermediate layers by accident.
+    #   EfficientNetV2 / Swin-V2 / MobileNet : "classifier.weight"  [C, F]
+    #   Swin-V2 (timm)                        : "head.weight"        [C, F]
+    #   DINOv2 (LayerNorm→Drop→Linear)        : "head.2.weight"      [C, F]
+    #   HybridCNNTransformerV2 (Drop→Linear)  : "head.1.weight"      [C, F]
+    _nc = None
+    for _key in ("classifier.weight", "head.weight", "head.1.weight", "head.2.weight"):
+        if _key in state and state[_key].ndim == 2:
+            _nc = state[_key].shape[0]
+            break
+    if _nc is not None:
+        config.NUM_CLASSES = _nc
+    elif config.NUM_CLASSES is None:
+        raise RuntimeError(
+            f"Cannot infer NUM_CLASSES from checkpoint {path.name}. "
+            "Expected one of: classifier.weight, head.weight, head.1.weight, head.2.weight"
+        )
 
     model = get_model(model_name)
     model.load_state_dict(state)

@@ -13,7 +13,8 @@ import torch.nn as nn
 from torch.cuda.amp import GradScaler, autocast
 from torch.utils.data import DataLoader
 
-from config import args, DEVICE, CKPT_DIR, HPARAMS, NUM_CLASSES
+import config as _config
+from config import args, DEVICE, CKPT_DIR, HPARAMS
 from dataset import GastroVisionDataset, get_weighted_sampler
 from losses import FocalLoss
 from models import get_model
@@ -221,7 +222,7 @@ def train_classifier(model_name: str, train_csv, val_csv, augmented: bool = Fals
             best_acc = acc
             torch.save(model.state_dict(), ckpt)
             with open(ckpt.with_suffix(".meta.json"), "w") as f:
-                json.dump({"num_classes": NUM_CLASSES}, f)
+                json.dump({"num_classes": _config.NUM_CLASSES}, f)
             print(f"  ✅ Saved (val_acc={best_acc:.4f})")
 
     print(f"\n  ★ {model_name} best val_acc: {best_acc:.4f}")
@@ -301,7 +302,7 @@ def train_classifier_heavy_aug(model_name: str, train_csv, val_csv):
             best_acc = acc
             torch.save(model.state_dict(), ckpt)
             with open(ckpt.with_suffix(".meta.json"), "w") as f:
-                json.dump({"num_classes": NUM_CLASSES}, f)
+                json.dump({"num_classes": _config.NUM_CLASSES}, f)
             print(f"  ✅ Saved (val_acc={best_acc:.4f})")
 
     print(f"\n  ★ {model_name} heavy aug best val_acc: {best_acc:.4f}")

@@ -35,11 +35,12 @@ from sklearn.calibration import calibration_curve
 
 import torchvision.transforms as T
 
+import config as _config
 from config import (
     args, DEVICE, SPLITS_DIR, RESULTS_DIR, CKPT_DIR, CALIB_DIR,
-    IMAGE_ROOT_DIR, OUTPUT_DIR, NUM_CLASSES, RARE_CLASSES, ULTRA_RARE,
-    CLASS_NAMES, FID_TRANSFORM,
+    IMAGE_ROOT_DIR, OUTPUT_DIR, CLASS_NAMES, FID_TRANSFORM,
 )
+# _config.NUM_CLASSES, _config.RARE_CLASSES, _config.ULTRA_RARE are populated after splits — access via _config.X
 from dataset import GastroVisionDataset
 from models import get_model, load_checkpoint
 from ensemble import ConfidenceEnsemble, eval_ensemble
@@ -146,7 +147,7 @@ def save_gradcam(model, model_name: str, loader, n_per_class: int = 5, suffix: s
         return
 
     cam     = GradCAM(model=model, target_layers=[target_layer])
-    counts  = {c: 0 for c in RARE_CLASSES}
+    counts  = {c: 0 for c in _config.RARE_CLASSES}
     inv_norm = T.Normalize(
         mean=[-0.485/0.229, -0.456/0.224, -0.406/0.225],
         std=[1/0.229, 1/0.224, 1/0.225]
@@ -156,7 +157,7 @@ def save_gradcam(model, model_name: str, loader, n_per_class: int = 5, suffix: s
     for xb, yb in loader:
         for i in range(len(yb)):
             cls = int(yb[i])
-            if cls not in RARE_CLASSES:
+            if cls not in _config.RARE_CLASSES:
                 continue
             if counts[cls] >= n_per_class:
                 continue
@@ -241,8 +242,8 @@ def compute_fid(real_df: pd.DataFrame, synth_df: pd.DataFrame):
     print("\nComputing pooled FID / KID...")
     inc, hook_list, h = _build_inception()
 
-    real_rare  = real_df[real_df["label"].isin(RARE_CLASSES)]
-    synth_rare = synth_df[synth_df["label"].isin(RARE_CLASSES)]
+    real_rare  = real_df[real_df["label"].isin(_config.RARE_CLASSES)]
+    synth_rare = synth_df[synth_df["label"].isin(_config.RARE_CLASSES)]
     fr = _fid_features(real_rare,  IMAGE_ROOT_DIR, inc, hook_list)
     fs = _fid_features(synth_rare, OUTPUT_DIR,     inc, hook_list)
 
@@ -270,7 +271,7 @@ def compute_per_class_fid(real_df: pd.DataFrame, synth_df: pd.DataFrame) -> dict
     inc, hook_list, h = _build_inception()
     results = {}
 
-    for cls in RARE_CLASSES:
+    for cls in _config.RARE_CLASSES:
         real_cls  = real_df[real_df["label"] == cls]
         synth_cls = synth_df[synth_df["label"] == cls]
         if len(real_cls) < 5 or len(synth_cls) < 5:
@@ -325,9 +326,9 @@ def _run_evaluation(split_csv: Path, suffix: str, label: str) -> dict:
 
         acc, yt, yp, pr = evaluate_split(model, ldr)
         _, _, f1, _     = precision_recall_fscore_support(
-            yt, yp, labels=list(range(NUM_CLASSES)), average=None, zero_division=0
+            yt, yp, labels=list(range(_config.NUM_CLASSES)), average=None, zero_division=0
         )
-        rare_idx = [c for c in RARE_CLASSES if c < NUM_CLASSES]
+        rare_idx = [c for c in _config.RARE_CLASSES if c < _config.NUM_CLASSES]
         ece      = plot_calibration(pr, yt, name, suffix)
 
         print(f"\n{name}{suffix}: acc={acc:.4f}  mean_f1={f1.mean():.4f}  ECE={ece:.4f}")
@@ -350,9 +351,9 @@ def _run_evaluation(split_csv: Path, suffix: str, label: str) -> dict:
             ensemble  = ConfidenceEnsemble(args.models, suffix=suffix)
             acc_e, yt_e, yp_e, pr_e = eval_ensemble(ensemble, ldr)
             _, _, f1_e, _ = precision_recall_fscore_support(
-                yt_e, yp_e, labels=list(range(NUM_CLASSES)), average=None, zero_division=0
+                yt_e, yp_e, labels=list(range(_config.NUM_CLASSES)), average=None, zero_division=0
             )
-            rare_idx  = [c for c in RARE_CLASSES if c < NUM_CLASSES]
+            rare_idx  = [c for c in _config.RARE_CLASSES if c < _config.NUM_CLASSES]
             ece_e     = plot_calibration(pr_e, yt_e, "ensemble", suffix)
 
             print(f"\nEnsemble ({len(ensemble.models)} models): "
@@ -375,8 +376,8 @@ def _run_evaluation(split_csv: Path, suffix: str, label: str) -> dict:
             sns.heatmap(
                 cm.astype(float) / (cm.sum(axis=1, keepdims=True) + 1e-8),
                 annot=True, fmt=".2f", cmap="Blues", ax=ax,
-                xticklabels=CLASS_NAMES[:NUM_CLASSES],
-                yticklabels=CLASS_NAMES[:NUM_CLASSES],
+                xticklabels=CLASS_NAMES[:_config.NUM_CLASSES],
+                yticklabels=CLASS_NAMES[:_config.NUM_CLASSES],
             )
             ax.set_title(f"Ensemble — normalised CM ({label})")
             ax.set_xlabel("Predicted")

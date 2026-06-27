@@ -18,10 +18,11 @@ import torch
 from torch.utils.data import DataLoader
 from sklearn.metrics import f1_score, precision_recall_fscore_support
 
+import config as _config
 from config import (
-    args, DEVICE, CKPT_DIR, RESULTS_DIR, SPLITS_DIR,
-    RARE_CLASSES, NUM_CLASSES, HPARAMS,
+    args, DEVICE, CKPT_DIR, RESULTS_DIR, SPLITS_DIR, HPARAMS,
 )
+# _config.RARE_CLASSES, _config.NUM_CLASSES are populated after splits — access via _config.X
 from dataset import GastroVisionDataset, get_weighted_sampler
 from models import get_model, load_checkpoint
 from ensemble import ConfidenceEnsemble, eval_ensemble
@@ -64,9 +65,9 @@ def ablation_ensemble_subsets(split_csv=None, suffix: str = "") -> dict:
                 ens = ConfidenceEnsemble(subset, suffix=suffix)
                 acc, yt, yp, _ = eval_ensemble(ens, ldr, subset=subset)
                 _, _, f1, _ = precision_recall_fscore_support(
-                    yt, yp, labels=list(range(NUM_CLASSES)), average=None, zero_division=0
+                    yt, yp, labels=list(range(_config.NUM_CLASSES)), average=None, zero_division=0
                 )
-                rare_idx   = [c for c in RARE_CLASSES if c < NUM_CLASSES]
+                rare_idx   = [c for c in _config.RARE_CLASSES if c < _config.NUM_CLASSES]
                 f1_rare    = float(f1[rare_idx].mean()) if rare_idx else 0.0
                 results[key] = {"acc": acc, "f1_mean": float(f1.mean()), "f1_rare": f1_rare,
                                 "n_models": len(subset)}
@@ -126,9 +127,9 @@ def ablation_sampling(model_name: str, train_csv, val_csv,
 
         acc, yt, yp = _eval_acc(model, vl)
         _, _, f1, _ = precision_recall_fscore_support(
-            yt, yp, labels=list(range(NUM_CLASSES)), average=None, zero_division=0
+            yt, yp, labels=list(range(_config.NUM_CLASSES)), average=None, zero_division=0
         )
-        rare_idx = [c for c in RARE_CLASSES if c < NUM_CLASSES]
+        rare_idx = [c for c in _config.RARE_CLASSES if c < _config.NUM_CLASSES]
         results[strat_name] = {
             "acc": acc, "f1_mean": float(f1.mean()),
             "f1_rare": float(f1[rare_idx].mean()) if rare_idx else 0.0,
@@ -153,7 +154,7 @@ def ablation_loss_function(model_name: str, train_csv, val_csv,
     from config import CLASS_COUNTS
     print(f"\n{'='*60}\nAblation: Loss function — {model_name}\n{'='*60}")
 
-    counts  = [CLASS_COUNTS.get(i, 1) for i in range(NUM_CLASSES)]
+    counts  = [CLASS_COUNTS.get(i, 1) for i in range(_config.NUM_CLASSES)]
     losses  = {
         "focal":       FocalLoss(gamma=2.0),
         "weighted_ce": WeightedCrossEntropy(counts, DEVICE),
@@ -181,9 +182,9 @@ def ablation_loss_function(model_name: str, train_csv, val_csv,
 
         acc, yt, yp = _eval_acc(model, vl)
         _, _, f1, _ = precision_recall_fscore_support(
-            yt, yp, labels=list(range(NUM_CLASSES)), average=None, zero_division=0
+            yt, yp, labels=list(range(_config.NUM_CLASSES)), average=None, zero_division=0
         )
-        rare_idx = [c for c in RARE_CLASSES if c < NUM_CLASSES]
+        rare_idx = [c for c in _config.RARE_CLASSES if c < _config.NUM_CLASSES]
         results[loss_name] = {
             "acc": acc, "f1_mean": float(f1.mean()),
             "f1_rare": float(f1[rare_idx].mean()) if rare_idx else 0.0,
@@ -239,9 +240,9 @@ def ablation_synth_count(model_name: str, base_train_csv,
         vl = DataLoader(val_ds, batch_size=16, shuffle=False, num_workers=2)
         acc, yt, yp = _eval_acc(model, vl)
         _, _, f1, _ = precision_recall_fscore_support(
-            yt, yp, labels=list(range(NUM_CLASSES)), average=None, zero_division=0
+            yt, yp, labels=list(range(_config.NUM_CLASSES)), average=None, zero_division=0
         )
-        rare_idx = [c for c in RARE_CLASSES if c < NUM_CLASSES]
+        rare_idx = [c for c in _config.RARE_CLASSES if c < _config.NUM_CLASSES]
         results[count] = {
             "acc": acc, "f1_mean": float(f1.mean()),
             "f1_rare": float(f1[rare_idx].mean()) if rare_idx else 0.0,

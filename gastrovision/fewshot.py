@@ -18,10 +18,12 @@ from torch.utils.data import DataLoader, Dataset
 from PIL import Image
 from pathlib import Path
 
+import config as _config
 from config import (
     args, DEVICE, RESULTS_DIR, SPLITS_DIR, IMAGE_ROOT_DIR,
-    CLASS_NAMES, CLASS_PROMPTS, RARE_CLASSES, ULTRA_RARE, NUM_CLASSES,
+    CLASS_NAMES, CLASS_PROMPTS,
 )
+# _config.RARE_CLASSES, _config.ULTRA_RARE, _config.NUM_CLASSES are populated after splits — access via _config.X
 from dataset import GastroVisionDataset
 
 
@@ -55,7 +57,7 @@ def run_clip_zeroshot(split: str = "test") -> dict:
 
     # Build text embeddings for each class using multiple templates
     text_features_list = []
-    for cls_idx in range(NUM_CLASSES):
+    for cls_idx in range(_config.NUM_CLASSES):
         cls_name = CLASS_NAMES[cls_idx] if cls_idx < len(CLASS_NAMES) else f"class_{cls_idx}"
         prompts  = [t.format(cls_name) for t in CLIP_TEMPLATES]
         tokens   = clip.tokenize(prompts).to(DEVICE)
@@ -91,12 +93,12 @@ def run_clip_zeroshot(split: str = "test") -> dict:
     yp = np.array(yp_all)
 
     from sklearn.metrics import f1_score, classification_report
-    f1_per_class = f1_score(yt, yp, labels=list(range(NUM_CLASSES)),
+    f1_per_class = f1_score(yt, yp, labels=list(range(_config.NUM_CLASSES)),
                             average=None, zero_division=0)
     acc          = float((yt == yp).mean())
 
-    rare_idx      = [c for c in RARE_CLASSES  if c < NUM_CLASSES]
-    ultra_idx     = [c for c in ULTRA_RARE    if c < NUM_CLASSES]
+    rare_idx      = [c for c in _config.RARE_CLASSES  if c < _config.NUM_CLASSES]
+    ultra_idx     = [c for c in _config.ULTRA_RARE    if c < _config.NUM_CLASSES]
 
     results = {
         "acc":           acc,
@@ -321,7 +323,7 @@ def eval_prototypical_on_rare(proto_model: PrototypicalNetwork,
     proto_model.eval()
     results = {}
 
-    for cls in ULTRA_RARE:
+    for cls in _config.ULTRA_RARE:
         support = load_class_images(train_df, cls)
         queries = load_class_images(test_df,  cls)
         if support is None or queries is None or len(queries) == 0:
@@ -333,7 +335,7 @@ def eval_prototypical_on_rare(proto_model: PrototypicalNetwork,
         # Build "other" class prototype from remaining train classes
         other_imgs = []
         for other_cls in np.random.choice(
-            [c for c in range(NUM_CLASSES) if c != cls], size=5, replace=False
+            [c for c in range(_config.NUM_CLASSES) if c != cls], size=5, replace=False
         ):
             other_support = load_class_images(train_df, other_cls)
             if other_support is not None:

@@ -28,11 +28,12 @@ from diffusers.optimization import get_scheduler as get_diffusers_scheduler
 from transformers import CLIPTextModel, CLIPTokenizer
 from peft import LoraConfig, get_peft_model, PeftModel
 
+import config as _config
 from config import (
     args, DEVICE, OUTPUT_DIR, CKPT_DIR, SPLITS_DIR, RESULTS_DIR,
-    RARE_CLASSES, REV_LABEL_MAP, CLASS_PROMPTS, DOMAIN_PREFIX,
-    NEGATIVE_PROMPT, SYNTH_DIR,
+    CLASS_PROMPTS, DOMAIN_PREFIX, NEGATIVE_PROMPT, SYNTH_DIR,
 )
+# RARE_CLASSES and REV_LABEL_MAP are populated after splits — access via _config.X
 from dataset import GastroVisionSDDataset
 from train import EMAModel, _snr_weights
 
@@ -245,12 +246,12 @@ def generate_synthetic():
     SYNTH_DIR.mkdir(parents=True, exist_ok=True)
     rows = []
 
-    for cls in RARE_CLASSES:
+    for cls in _config.RARE_CLASSES:
         cls_name = l2n.get(cls, f"class_{cls}")
         cls_dir  = SYNTH_DIR / str(cls)
         cls_dir.mkdir(parents=True, exist_ok=True)
 
-        original_label = REV_LABEL_MAP.get(cls, cls)
+        original_label = _config.REV_LABEL_MAP.get(cls, cls)
         prompt = DOMAIN_PREFIX + CLASS_PROMPTS.get(
             original_label, f"endoscopy photo, {cls_name}, circular vignette"
         )
