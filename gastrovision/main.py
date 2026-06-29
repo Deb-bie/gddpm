@@ -53,7 +53,10 @@ from ablation import (
     ablation_ensemble_subsets, ablation_sampling,
     ablation_loss_function, ablation_synth_count, print_ablation_summary,
 )
-from fewshot  import run_clip_zeroshot, train_prototypical, eval_prototypical_on_rare
+from fewshot  import (
+    run_clip_zeroshot, train_prototypical, eval_prototypical_on_rare,
+    run_backbone_comparison, run_frequency_threshold_sweep,
+)
 from visualize import generate_all_figures
 from models   import load_checkpoint
 
@@ -284,7 +287,7 @@ def main():
         proto_path = RESULTS_DIR / "proto_net.pt"
         proto_eval_path = RESULTS_DIR / "proto_eval_val.json"
         if not proto_eval_path.exists():
-            print("\n[8b] Prototypical Network...")
+            print("\n[8b] Prototypical Network (episodic training)...")
             proto = train_prototypical(
                 str(train_csv), str(val_csv),
                 n_episodes=2000, n_way=min(10, len(config.ULTRA_RARE) + 5),
@@ -293,6 +296,27 @@ def main():
             eval_prototypical_on_rare(proto, str(train_csv), str(val_csv))
         else:
             print("  ✅ ProtoNet val results exist — skipping")
+
+        # [8c] Backbone comparison: pretrained DINOv2 vs fine-tuned DINOv2 vs BiomedCLIP
+        #       × {no augmentation, feature-space augmentation}
+        backbone_cmp_path = RESULTS_DIR / "backbone_comparison.json"
+        if not backbone_cmp_path.exists():
+            print("\n[8c] Backbone comparison experiment...")
+            run_backbone_comparison(str(train_csv), str(val_csv))
+        else:
+            print("  ✅ Backbone comparison exists — skipping")
+
+        # [8d] Frequency threshold sweep: ProtoNet recall vs training set size
+        sweep_path = RESULTS_DIR / "frequency_threshold_sweep.json"
+        if not sweep_path.exists():
+            print("\n[8d] Frequency threshold sweep (n<=1,2,3,5,10,15,20)...")
+            run_frequency_threshold_sweep(
+                str(train_csv), str(val_csv),
+                thresholds=(1, 2, 3, 5, 10, 15, 20),
+                backbone_type="dinov2_finetuned",
+            )
+        else:
+            print("  ✅ Frequency threshold sweep exists — skipping")
 
     # ------------------------------------------------------------------
     # Step 9: Ablation studies

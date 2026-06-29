@@ -158,6 +158,61 @@ class HybridCNNTransformerV2(nn.Module):
 
 
 # ==============================================================================
+# BiomedCLIP classifier
+# ==============================================================================
+
+class BiomedCLIPClassifier(nn.Module):
+    """
+    BiomedCLIP ViT-B/16 vision encoder with a linear classification head.
+
+    BiomedCLIP (Microsoft, 2023) is pretrained on 15M biomedical image-text
+    pairs from PubMed Central, making it a strong initialisation for medical
+    imaging tasks.  Here we use it as a drop-in replacement for DINOv2 in the
+    few-shot backbone comparison experiment.
+
+    Feature dimension: 512  (BiomedCLIP image-embedding projection space)
+    Requires: open_clip_torch  (pip install open_clip_torch)
+    """
+
+    def __init__(self, num_classes: int, dropout: float = 0.1):
+        super().__init__()
+        try:
+            import open_clip
+        except ImportError:
+            raise ImportError(
+                "open_clip_torch is required for BiomedCLIPClassifier. "
+                "Run: pip install open_clip_torch"
+            )
+        self._model, _, _ = open_clip.create_model_and_transforms(
+            "hf-hub:microsoft/BiomedCLIP-PubMedBERT_256-vit_base_patch16_224"
+        )
+        feat_dim = 512  # BiomedCLIP image-encoder output dimension
+        self.head = nn.Sequential(
+            nn.LayerNorm(feat_dim),
+            nn.Dropout(dropout),
+            nn.Linear(feat_dim, num_classes),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        feats = self._model.encode_image(x).float()
+        return self.head(feats)
+
+    def get_features(self, x: torch.Tensor) -> torch.Tensor:
+        """Return image embeddings (for ProtoNet / t-SNE use)."""
+        return self._model.encode_image(x).float()
+
+    def freeze_backbones(self):
+        for p in self._model.parameters():
+            p.requires_grad = False
+        for p in self.head.parameters():
+            p.requires_grad = True
+
+    def unfreeze_all(self):
+        for p in self.parameters():
+            p.requires_grad = True
+
+
+# ==============================================================================
 # Registry
 # ==============================================================================
 
@@ -175,6 +230,7 @@ MODEL_REGISTRY = {
     "swin_v2":                   _make_swin_v2,
     "swin":                      lambda n: timm.create_model("swin_base_patch4_window7_224", pretrained=True, num_classes=n),
     "dinov2":                    lambda n: DINOv2Classifier(n),
+    "biomedclip":                lambda n: BiomedCLIPClassifier(n),
     "mobile":                    get_mobilenetv3,
     "hybrid_cnn_transformer_v2": lambda n: HybridCNNTransformerV2(n),
 }
@@ -206,6 +262,7 @@ def load_checkpoint(model_name: str, suffix: str = "") -> nn.Module:
     #   EfficientNetV2 / Swin-V2 / MobileNet : "classifier.weight"  [C, F]
     #   Swin-V2 (timm)                        : "head.weight"        [C, F]
     #   DINOv2 (LayerNorm→Drop→Linear)        : "head.2.weight"      [C, F]
+    #   BiomedCLIP (LayerNorm→Drop→Linear)    : "head.2.weight"      [C, F]
     #   HybridCNNTransformerV2 (Drop→Linear)  : "head.1.weight"      [C, F]
     _nc = None
     for _key in ("classifier.weight", "head.weight", "head.1.weight", "head.2.weight"):

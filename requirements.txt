@@ -45,5 +45,10 @@ grad-cam>=1.4              # pytorch-grad-cam (GradCAM overlays)
 torchmetrics[image]>=1.2   # MS-SSIM diversity metrics
 lpips>=0.1.4               # perceptual similarity
 
+# ── BiomedCLIP / open_clip ────────────────────────────────────────────────────
+# Required for BiomedCLIPClassifier and the backbone comparison experiment.
+# open_clip_torch is the standard package for BiomedCLIP from Microsoft HuggingFace Hub.
+open_clip_torch>=2.20.0
+
 # ── Optional XAI (graceful fallback if install fails) ─────────────────────────
 shap>=0.43
