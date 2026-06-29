@@ -422,7 +422,11 @@ def plot_tsne(model, model_name: str, csv_path=None, save_path=None,
     labels = torch.cat(all_labels, dim=0)[:n_samples].numpy()
 
     print(f"  Running t-SNE on {len(feats)} samples...")
-    tsne    = TSNE(n_components=2, perplexity=30, random_state=args.seed, n_iter=1000)
+    # sklearn >= 1.4 renamed n_iter -> max_iter; support both
+    try:
+        tsne = TSNE(n_components=2, perplexity=30, random_state=args.seed, max_iter=1000)
+    except TypeError:
+        tsne = TSNE(n_components=2, perplexity=30, random_state=args.seed, n_iter=1000)
     emb     = tsne.fit_transform(feats)
 
     fig, ax = plt.subplots(figsize=(12, 10))

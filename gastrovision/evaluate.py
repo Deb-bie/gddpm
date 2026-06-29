@@ -155,8 +155,10 @@ def _gradcam_pure(model: nn.Module, target_layer: nn.Module,
     if not activations or not gradients:
         return None
 
-    act  = activations[0]   # (1, C, H, W)
-    grad = gradients[0]     # (1, C, H, W)
+    act  = activations[0]                   # (1, C, H, W)
+    grad = gradients[0]                     # (1, C, H, W) or None elements
+    if grad is None:
+        return None
 
     if act.ndim != 4:
         return None          # unexpected shape (e.g., transformer token sequence)
@@ -196,21 +198,24 @@ def save_gradcam(model, model_name: str, loader, n_per_class: int = 5, suffix: s
     Transformer models (DINOv2, Swin-V2) are silently skipped.
     """
     # Select target layer — CNN models only.
-    # DINOv2 (.backbone) and Swin-V2 (transformer layers) have no spatial conv
-    # layer compatible with standard GradCAM; skip them gracefully.
+    # DINOv2 (.backbone) and Swin-V2 (transformer) have no spatial conv
+    # layer compatible with standard GradCAM; they are skipped gracefully.
     target_layer = None
-    if hasattr(model, "cnn"):                                       # HybridCNNTransformerV2
-        children = list(model.cnn.children())
-        target_layer = children[-1] if children else None
-    elif hasattr(model, "blocks") and not hasattr(model, "backbone"):   # EfficientNetV2 (timm)
-        # blocks is a Sequential of stages; last stage is the target
+    if hasattr(model, "cnn_proj"):
+        # HybridCNNTransformerV2: hook on the 1×1 conv that projects CNN
+        # feature maps to transformer_dim — simple Conv2d, always (B,C,H,W) output.
+        target_layer = model.cnn_proj
+    elif hasattr(model, "blocks") and not hasattr(model, "backbone"):
+        # EfficientNetV2 (timm): last block stage before global pool
         target_layer = model.blocks[-1] if model.blocks else None
-    elif hasattr(model, "features"):                                # generic CNN fallback
+    elif hasattr(model, "features"):
+        # generic CNN fallback
         children = list(model.features.children())
         target_layer = children[-1] if children else None
+    # DINOv2 (has .backbone) and Swin-V2 — target_layer stays None → silently skip
 
     if target_layer is None:
-        return  # transformer — silently skip
+        return
 
     inv_norm = T.Normalize(
         mean=[-0.485/0.229, -0.456/0.224, -0.406/0.225],
