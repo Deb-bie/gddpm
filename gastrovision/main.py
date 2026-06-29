@@ -139,8 +139,34 @@ def main():
         evaluate_heavy_aug()
         evaluate_all(augmented=True)
         evaluate_test()
-        if args.run_fewshot:
-            run_clip_zeroshot("test")
+        if args.run_fewshot and config.ULTRA_RARE:
+            clip_val_path = RESULTS_DIR / "fewshot_clip_val.json"
+            if not clip_val_path.exists():
+                run_clip_zeroshot(split="val")
+            clip_test_path = RESULTS_DIR / "fewshot_clip_test.json"
+            if not clip_test_path.exists():
+                run_clip_zeroshot(split="test")
+
+            # Backbone comparison: pretrained DINOv2 vs fine-tuned DINOv2 vs BiomedCLIP
+            backbone_cmp_path = RESULTS_DIR / "backbone_comparison.json"
+            if not backbone_cmp_path.exists():
+                print("\n[8c] Backbone comparison experiment...")
+                run_backbone_comparison(str(train_csv), str(val_csv))
+            else:
+                print("  ✅ Backbone comparison exists — skipping")
+
+            # Frequency threshold sweep
+            sweep_path = RESULTS_DIR / "frequency_threshold_sweep.json"
+            if not sweep_path.exists():
+                print("\n[8d] Frequency threshold sweep (n<=1,2,3,5,10,15,20)...")
+                run_frequency_threshold_sweep(
+                    str(train_csv), str(val_csv),
+                    thresholds=(1, 2, 3, 5, 10, 15, 20),
+                    backbone_type="dinov2_finetuned",
+                )
+            else:
+                print("  ✅ Frequency threshold sweep exists — skipping")
+
         generate_all_figures()
         return
 
