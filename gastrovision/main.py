@@ -249,11 +249,24 @@ def main():
     # Step 7: Validation evaluation (S1 / S2 / S3)
     # ------------------------------------------------------------------
     print("\n" + "="*65 + "\nStep 7: Validation evaluation\n" + "="*65)
-    results_s1 = evaluate_all(augmented=False)
-    if any((CKPT_DIR / f"sota_{n}_heavy.pt").exists() for n in args.models):
+
+    s1_path = RESULTS_DIR / "eval_results.json"
+    if not s1_path.exists():
+        results_s1 = evaluate_all(augmented=False)
+    else:
+        print("  ✅ S1 val evaluation exists — skipping")
+
+    s2_path = RESULTS_DIR / "eval_results_heavy.json"
+    if not s2_path.exists() and any((CKPT_DIR / f"sota_{n}_heavy.pt").exists() for n in args.models):
         results_s2 = evaluate_heavy_aug()
-    if synth_df is not None:
+    elif s2_path.exists():
+        print("  ✅ S2 val evaluation exists — skipping")
+
+    s3_path = RESULTS_DIR / "eval_results_aug.json"
+    if not s3_path.exists() and synth_df is not None:
         results_s3 = evaluate_all(augmented=True)
+    elif s3_path.exists():
+        print("  ✅ S3 val evaluation exists — skipping")
 
     # ------------------------------------------------------------------
     # Step 8: Few-shot evaluation (CLIP + ProtoNet) on ultra-rare classes
@@ -261,32 +274,54 @@ def main():
     if args.run_fewshot and config.ULTRA_RARE:
         print("\n" + "="*65 + "\nStep 8: Few-shot evaluation on ultra-rare classes\n" + "="*65)
 
-        print("\n[8a] CLIP zero-shot...")
-        run_clip_zeroshot(split="val")
+        clip_val_path = RESULTS_DIR / "fewshot_clip_val.json"
+        if not clip_val_path.exists():
+            print("\n[8a] CLIP zero-shot...")
+            run_clip_zeroshot(split="val")
+        else:
+            print("  ✅ CLIP val results exist — skipping")
 
-        print("\n[8b] Prototypical Network...")
-        proto = train_prototypical(
-            str(train_csv), str(val_csv),
-            n_episodes=2000, n_way=min(10, len(config.ULTRA_RARE) + 5),
-            k_shot=5, q_query=10,
-        )
-        eval_prototypical_on_rare(proto, str(train_csv), str(val_csv))
+        proto_path = RESULTS_DIR / "proto_net.pt"
+        proto_eval_path = RESULTS_DIR / "proto_eval_val.json"
+        if not proto_eval_path.exists():
+            print("\n[8b] Prototypical Network...")
+            proto = train_prototypical(
+                str(train_csv), str(val_csv),
+                n_episodes=2000, n_way=min(10, len(config.ULTRA_RARE) + 5),
+                k_shot=5, q_query=10,
+            )
+            eval_prototypical_on_rare(proto, str(train_csv), str(val_csv))
+        else:
+            print("  ✅ ProtoNet val results exist — skipping")
 
     # ------------------------------------------------------------------
     # Step 9: Ablation studies
     # ------------------------------------------------------------------
     if args.run_ablations:
         print("\n" + "="*65 + "\nStep 9: Ablation studies\n" + "="*65)
-        best_model = args.models[0]  # Use first model for ablations
+        best_model = args.models[0]
 
-        ablation_ensemble_subsets(val_csv, suffix="")
-        if (CKPT_DIR / f"sota_{best_model}_aug.pt").exists():
+        if not (RESULTS_DIR / "ablation_ensemble.json").exists():
+            ablation_ensemble_subsets(val_csv, suffix="")
+        else:
+            print("  ✅ Ensemble ablation exists — skipping")
+
+        if (CKPT_DIR / f"sota_{best_model}_aug.pt").exists() and \
+                not (RESULTS_DIR / "ablation_ensemble_aug.json").exists():
             ablation_ensemble_subsets(val_csv, suffix="_aug")
 
-        ablation_sampling(best_model, train_csv, val_csv, epochs=10)
-        ablation_loss_function(best_model, train_csv, val_csv, epochs=10)
+        if not (RESULTS_DIR / f"ablation_sampling_{best_model}.json").exists():
+            ablation_sampling(best_model, train_csv, val_csv, epochs=10)
+        else:
+            print("  ✅ Sampling ablation exists — skipping")
 
-        if synth_csv_path.exists():
+        if not (RESULTS_DIR / f"ablation_loss_{best_model}.json").exists():
+            ablation_loss_function(best_model, train_csv, val_csv, epochs=10)
+        else:
+            print("  ✅ Loss ablation exists — skipping")
+
+        if synth_csv_path.exists() and \
+                not (RESULTS_DIR / f"ablation_synth_count_{best_model}.json").exists():
             ablation_synth_count(best_model, train_csv, synth_csv_path, val_csv)
 
         print_ablation_summary()
@@ -295,11 +330,19 @@ def main():
     # Step 10: Final test set evaluation
     # ------------------------------------------------------------------
     print("\n" + "="*65 + "\nStep 10: Final held-out test evaluation\n" + "="*65)
-    evaluate_test()
 
-    # Run CLIP on test set if few-shot track is enabled
+    test_path = RESULTS_DIR / "test_results.json"
+    if not test_path.exists():
+        evaluate_test()
+    else:
+        print("  ✅ Test evaluation exists — skipping")
+
     if args.run_fewshot:
-        run_clip_zeroshot(split="test")
+        clip_test_path = RESULTS_DIR / "fewshot_clip_test.json"
+        if not clip_test_path.exists():
+            run_clip_zeroshot(split="test")
+        else:
+            print("  ✅ CLIP test results exist — skipping")
 
     # ------------------------------------------------------------------
     # Step 11: Generate all paper figures
