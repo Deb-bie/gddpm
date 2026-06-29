@@ -297,7 +297,12 @@ def plot_rare_class_f1(save_path=None):
         print("  No eval results or no rare classes found — skipping Figure 6")
         return
 
-    rare_idx   = sorted(_config.RARE_CLASSES)
+    # Exclude ultra-rare (n < ultraRare_threshold) — too few samples for valid claims
+    ultra_rare_set = set(getattr(_config, "ULTRA_RARE", []))
+    rare_idx   = sorted(c for c in _config.RARE_CLASSES if c not in ultra_rare_set)
+    if not rare_idx:
+        print("  No non-ultra-rare rare classes found — skipping Figure 6")
+        return
     rare_names = [CLASS_NAMES[c][:22] if c < len(CLASS_NAMES) else f"class_{c}"
                   for c in rare_idx]
 
@@ -322,7 +327,8 @@ def plot_rare_class_f1(save_path=None):
     ax.set_ylabel("F1 Score", fontsize=12)
     ax.set_ylim(0, 1.18)
     ax.set_title(
-        f"Rare-Class F1 by Strategy — Ensemble (n < {args.rare_threshold})\n"
+        f"Rare-Class F1 by Strategy — Ensemble "
+        f"({args.ultraRare_threshold} ≤ n < {args.rare_threshold})\n"
         "Does SD-synthetic augmentation help rare class recognition?",
         fontsize=12,
     )
