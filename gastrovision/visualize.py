@@ -303,36 +303,58 @@ def plot_tsne(model, model_name: str, csv_path=None, save_path=None,
     all_feats, all_labels = [], []
     model.eval()
 
+    # Build a feature extractor in priority order:
+    #   1. Custom get_features() — DINOv2, HybridCNNTransformerV2
+    #   2. timm forward_features() + GAP — EfficientNetV2-S, Swin-V2
+    #   3. Hook on last non-classifier module as last resort
     get_feats = getattr(model, "get_features", None)
-    if get_feats is None:
-        # Fallback: register hook on avgpool or norm
+    use_timm  = get_feats is None and hasattr(model, "forward_features")
+    handle    = None
+
+    if not get_feats and not use_timm:
         feats_hook = []
         def hook_fn(m, i, o):
             feats_hook.append(o.detach().cpu())
-        handle = None
-        for name, mod in model.named_modules():
-            if "avgpool" in name or "norm" in name:
+        for name, mod in reversed(list(model.named_modules())):
+            if name and "classifier" not in name and "head" not in name:
                 handle = mod.register_forward_hook(hook_fn)
                 break
 
     with torch.no_grad():
         for xb, yb in ldr:
-            if get_feats:
-                f = get_feats(xb.to(DEVICE)).cpu()
-            else:
-                feats_hook.clear()
-                _ = model(xb.to(DEVICE))
-                f = feats_hook[0].flatten(1) if feats_hook else None
-                if f is None:
-                    continue
+            xb = xb.to(DEVICE)
+            try:
+                if get_feats:
+                    f = get_feats(xb).cpu()
+                elif use_timm:
+                    raw = model.forward_features(xb)
+                    # timm may return (B, H, W, C) or (B, C, H, W) or (B, C)
+                    if raw.ndim == 4:
+                        f = raw.mean(dim=[1, 2]) if raw.shape[1] < raw.shape[-1] \
+                            else raw.mean(dim=[2, 3])
+                    else:
+                        f = raw
+                    f = f.cpu()
+                else:
+                    feats_hook.clear()
+                    _ = model(xb)
+                    f = feats_hook[0].flatten(1).cpu() if feats_hook else None
+                    if f is None:
+                        continue
+            except Exception as _fe:
+                print(f"  Feature extraction error: {_fe}")
+                continue
             all_feats.append(f)
             all_labels.append(yb)
             if sum(len(x) for x in all_feats) >= n_samples:
                 break
 
-    if handle:
+    if handle is not None:
         handle.remove()
 
+    if not all_feats:
+        print("  t-SNE: no features extracted — skipping")
+        return None
     feats  = torch.cat(all_feats,  dim=0)[:n_samples].numpy()
     labels = torch.cat(all_labels, dim=0)[:n_samples].numpy()
 
