@@ -53,10 +53,6 @@ from ablation import (
     ablation_ensemble_subsets, ablation_sampling,
     ablation_loss_function, ablation_synth_count, print_ablation_summary,
 )
-from fewshot  import (
-    run_clip_zeroshot, train_prototypical, eval_prototypical_on_rare,
-    run_backbone_comparison, run_frequency_threshold_sweep,
-)
 from visualize import generate_all_figures
 from models   import load_checkpoint
 
@@ -139,35 +135,15 @@ def main():
         evaluate_heavy_aug()
         evaluate_all(augmented=True)
         evaluate_test()
-        if args.run_fewshot and config.ULTRA_RARE:
-            clip_val_path = RESULTS_DIR / "fewshot_clip_val.json"
-            if not clip_val_path.exists():
-                run_clip_zeroshot(split="val")
-            clip_test_path = RESULTS_DIR / "fewshot_clip_test.json"
-            if not clip_test_path.exists():
-                run_clip_zeroshot(split="test")
-
-            # Backbone comparison: pretrained DINOv2 vs fine-tuned DINOv2 vs BiomedCLIP
-            backbone_cmp_path = RESULTS_DIR / "backbone_comparison.json"
-            if not backbone_cmp_path.exists():
-                print("\n[8c] Backbone comparison experiment...")
-                run_backbone_comparison(str(train_csv), str(val_csv))
-            else:
-                print("  ✅ Backbone comparison exists — skipping")
-
-            # Frequency threshold sweep
-            sweep_path = RESULTS_DIR / "frequency_threshold_sweep.json"
-            if not sweep_path.exists():
-                print("\n[8d] Frequency threshold sweep (n<=1,2,3,5,10,15,20)...")
-                run_frequency_threshold_sweep(
-                    str(train_csv), str(val_csv),
-                    thresholds=(1, 2, 3, 5, 10, 15, 20),
-                    backbone_type="dinov2_finetuned",
-                )
-            else:
-                print("  ✅ Frequency threshold sweep exists — skipping")
-
-        generate_all_figures()
+        # Load best model for t-SNE; fall back to figures-only if unavailable
+        try:
+            _best = args.models[0]
+            _mdl  = load_checkpoint(_best, suffix="")
+            generate_all_figures(model=_mdl, model_name=_best)
+            del _mdl
+        except Exception as _fe:
+            print(f"  Model load for t-SNE failed ({_fe}) — generating figures without t-SNE")
+            generate_all_figures()
         return
 
     # ------------------------------------------------------------------
@@ -298,57 +274,10 @@ def main():
         print("  ✅ S3 val evaluation exists — skipping")
 
     # ------------------------------------------------------------------
-    # Step 8: Few-shot evaluation (CLIP + ProtoNet) on ultra-rare classes
-    # ------------------------------------------------------------------
-    if args.run_fewshot and config.ULTRA_RARE:
-        print("\n" + "="*65 + "\nStep 8: Few-shot evaluation on ultra-rare classes\n" + "="*65)
-
-        clip_val_path = RESULTS_DIR / "fewshot_clip_val.json"
-        if not clip_val_path.exists():
-            print("\n[8a] CLIP zero-shot...")
-            run_clip_zeroshot(split="val")
-        else:
-            print("  ✅ CLIP val results exist — skipping")
-
-        proto_path = RESULTS_DIR / "proto_net.pt"
-        proto_eval_path = RESULTS_DIR / "proto_eval_val.json"
-        if not proto_eval_path.exists():
-            print("\n[8b] Prototypical Network (episodic training)...")
-            proto = train_prototypical(
-                str(train_csv), str(val_csv),
-                n_episodes=2000, n_way=min(10, len(config.ULTRA_RARE) + 5),
-                k_shot=5, q_query=10,
-            )
-            eval_prototypical_on_rare(proto, str(train_csv), str(val_csv))
-        else:
-            print("  ✅ ProtoNet val results exist — skipping")
-
-        # [8c] Backbone comparison: pretrained DINOv2 vs fine-tuned DINOv2 vs BiomedCLIP
-        #       × {no augmentation, feature-space augmentation}
-        backbone_cmp_path = RESULTS_DIR / "backbone_comparison.json"
-        if not backbone_cmp_path.exists():
-            print("\n[8c] Backbone comparison experiment...")
-            run_backbone_comparison(str(train_csv), str(val_csv))
-        else:
-            print("  ✅ Backbone comparison exists — skipping")
-
-        # [8d] Frequency threshold sweep: ProtoNet recall vs training set size
-        sweep_path = RESULTS_DIR / "frequency_threshold_sweep.json"
-        if not sweep_path.exists():
-            print("\n[8d] Frequency threshold sweep (n<=1,2,3,5,10,15,20)...")
-            run_frequency_threshold_sweep(
-                str(train_csv), str(val_csv),
-                thresholds=(1, 2, 3, 5, 10, 15, 20),
-                backbone_type="dinov2_finetuned",
-            )
-        else:
-            print("  ✅ Frequency threshold sweep exists — skipping")
-
-    # ------------------------------------------------------------------
-    # Step 9: Ablation studies
+    # Step 8: Ablation studies
     # ------------------------------------------------------------------
     if args.run_ablations:
-        print("\n" + "="*65 + "\nStep 9: Ablation studies\n" + "="*65)
+        print("\n" + "="*65 + "\nStep 8: Ablation studies\n" + "="*65)
         best_model = args.models[0]
 
         if not (RESULTS_DIR / "ablation_ensemble.json").exists():
@@ -377,9 +306,9 @@ def main():
         print_ablation_summary()
 
     # ------------------------------------------------------------------
-    # Step 10: Final test set evaluation
+    # Step 9: Final test set evaluation
     # ------------------------------------------------------------------
-    print("\n" + "="*65 + "\nStep 10: Final held-out test evaluation\n" + "="*65)
+    print("\n" + "="*65 + "\nStep 9: Final held-out test evaluation\n" + "="*65)
 
     test_path = RESULTS_DIR / "test_results.json"
     if not test_path.exists():
@@ -387,17 +316,10 @@ def main():
     else:
         print("  ✅ Test evaluation exists — skipping")
 
-    if args.run_fewshot:
-        clip_test_path = RESULTS_DIR / "fewshot_clip_test.json"
-        if not clip_test_path.exists():
-            run_clip_zeroshot(split="test")
-        else:
-            print("  ✅ CLIP test results exist — skipping")
-
     # ------------------------------------------------------------------
-    # Step 11: Generate all paper figures
+    # Step 10: Generate all paper figures
     # ------------------------------------------------------------------
-    print("\n" + "="*65 + "\nStep 11: Generating paper figures\n" + "="*65)
+    print("\n" + "="*65 + "\nStep 10: Generating paper figures\n" + "="*65)
     try:
         best_name = args.models[0]
         model = load_checkpoint(best_name, suffix="")

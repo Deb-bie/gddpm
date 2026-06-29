@@ -122,61 +122,84 @@ def plot_calibration(probs: np.ndarray, y_true: np.ndarray,
 # GradCAM output
 # ==============================================================================
 
+def _cam_overlay(img_np: np.ndarray, cam_mask: np.ndarray, alpha: float = 0.5) -> np.ndarray:
+    """
+    GradCAM heatmap overlay using only numpy + matplotlib — no cv2 needed.
+    img_np:   float32 [H,W,3] in [0,1]
+    cam_mask: float32 [H,W]   in [0,1]
+    returns:  uint8   [H,W,3] in [0,255]
+    """
+    heatmap = plt.cm.jet(cam_mask)[:, :, :3]          # (H,W,3) float [0,1]
+    overlay = (1.0 - alpha) * img_np + alpha * heatmap
+    return (np.clip(overlay, 0, 1) * 255).astype(np.uint8)
+
+
 def save_gradcam(model, model_name: str, loader, n_per_class: int = 5, suffix: str = ""):
     """
-    Save GradCAM overlays for rare classes.
-    Requires pytorch_grad_cam.
+    Save GradCAM overlays for rare classes (CNN-based models only).
+    Uses pure numpy/matplotlib overlay — no cv2 dependency.
+    Transformer models (DINOv2, Swin-V2) are skipped gracefully.
     """
     try:
         from pytorch_grad_cam import GradCAM
-        from pytorch_grad_cam.utils.image import show_cam_on_image
         from pytorch_grad_cam.utils.model_targets import ClassifierOutputTarget
     except Exception as _e:
         print(f"  GradCAM unavailable ({type(_e).__name__}: {_e}) — skipping")
         return
 
-    # Select target layer
+    # Select target layer — CNN models only.
+    # DINOv2 (has .backbone) and Swin-V2 (transformer) have no spatial conv
+    # layer suitable for standard GradCAM; skip them.
     target_layer = None
-    if hasattr(model, "cnn"):
-        target_layer = list(model.cnn.children())[-1]
-    elif hasattr(model, "features"):
-        target_layer = list(model.features.children())[-1]
+    if hasattr(model, "cnn"):                              # HybridCNNTransformerV2
+        children = list(model.cnn.children())
+        target_layer = children[-1] if children else None
+    elif hasattr(model, "blocks") and not hasattr(model, "backbone"):  # EfficientNetV2 (timm)
+        target_layer = model.blocks[-1] if model.blocks else None
+    elif hasattr(model, "features"):                       # generic CNN fallback
+        children = list(model.features.children())
+        target_layer = children[-1] if children else None
 
     if target_layer is None:
-        print(f"  GradCAM: could not identify target layer for {model_name}")
+        # Silently skip transformers — not an error
         return
 
-    cam     = GradCAM(model=model, target_layers=[target_layer])
-    counts  = {c: 0 for c in _config.RARE_CLASSES}
     inv_norm = T.Normalize(
         mean=[-0.485/0.229, -0.456/0.224, -0.406/0.225],
         std=[1/0.229, 1/0.224, 1/0.225]
     )
 
-    model.eval()
-    for xb, yb in loader:
-        for i in range(len(yb)):
-            cls = int(yb[i])
-            if cls not in _config.RARE_CLASSES:
-                continue
-            if counts[cls] >= n_per_class:
-                continue
-            inp = xb[i:i+1].to(DEVICE)
-            target = [ClassifierOutputTarget(cls)]
-            grayscale_cam = cam(input_tensor=inp, targets=target)[0]
-            rgb_img = inv_norm(xb[i]).permute(1, 2, 0).clamp(0, 1).numpy()
-            visualization = show_cam_on_image(rgb_img, grayscale_cam, use_rgb=True)
+    try:
+        cam    = GradCAM(model=model, target_layers=[target_layer])
+        counts = {c: 0 for c in _config.RARE_CLASSES}
+        model.eval()
 
-            save_dir = RESULTS_DIR / "gradcam" / f"class_{cls:02d}"
-            save_dir.mkdir(parents=True, exist_ok=True)
-            from PIL import Image as PILImage
-            PILImage.fromarray(visualization).save(
-                save_dir / f"{model_name}{suffix}_{counts[cls]:02d}.png"
-            )
-            counts[cls] += 1
-        if all(v >= n_per_class for v in counts.values()):
-            break
-    print(f"  GradCAM overlays saved → {RESULTS_DIR / 'gradcam'}")
+        for xb, yb in loader:
+            for i in range(len(yb)):
+                cls = int(yb[i])
+                if cls not in _config.RARE_CLASSES:
+                    continue
+                if counts[cls] >= n_per_class:
+                    continue
+                inp           = xb[i:i+1].to(DEVICE)
+                grayscale_cam = cam(input_tensor=inp,
+                                    targets=[ClassifierOutputTarget(cls)])[0]
+                rgb_img       = inv_norm(xb[i]).permute(1, 2, 0).clamp(0, 1).numpy()
+                visualization = _cam_overlay(rgb_img, grayscale_cam)
+
+                save_dir = RESULTS_DIR / "gradcam" / f"class_{cls:02d}"
+                save_dir.mkdir(parents=True, exist_ok=True)
+                from PIL import Image as PILImage
+                PILImage.fromarray(visualization).save(
+                    save_dir / f"{model_name}{suffix}_{counts[cls]:02d}.png"
+                )
+                counts[cls] += 1
+            if all(v >= n_per_class for v in counts.values()):
+                break
+
+        print(f"  GradCAM overlays saved → {RESULTS_DIR / 'gradcam'}")
+    except Exception as _ge:
+        print(f"  GradCAM failed for {model_name}: {_ge}")
 
 
 # ==============================================================================

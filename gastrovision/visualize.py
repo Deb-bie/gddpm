@@ -30,7 +30,7 @@ from config import (
     args, DEVICE, IMAGE_ROOT_DIR, OUTPUT_DIR, RESULTS_DIR, SPLITS_DIR,
     CLASS_NAMES, CLASS_COUNTS,
 )
-# _config.RARE_CLASSES, _config.ULTRA_RARE, _config.NUM_CLASSES are populated after splits — access via _config.X
+# _config.RARE_CLASSES and _config.NUM_CLASSES are populated after splits — access via _config.X
 from dataset import GastroVisionDataset, build_classifier_transform
 
 
@@ -47,9 +47,8 @@ STRATEGY_COLORS = {
 }
 
 TIER_COLORS = {
-    "common":      "#aec6e8",
-    "rare":        "#f4a259",
-    "ultra_rare":  "#c0392b",
+    "common": "#aec6e8",
+    "rare":   "#f4a259",
 }
 
 
@@ -59,8 +58,8 @@ TIER_COLORS = {
 
 def plot_class_distribution(save_path=None):
     """
-    Horizontal bar chart of class sizes, colour-coded by tier.
-    Log scale on x-axis to show ultra-rare classes alongside common ones.
+    Horizontal bar chart of class sizes, colour-coded by rare / common tier.
+    Log scale on x-axis to show class imbalance clearly.
     """
     save_path = save_path or RESULTS_DIR / "fig1_class_distribution.png"
 
@@ -68,14 +67,10 @@ def plot_class_distribution(save_path=None):
               for i in range(len(CLASS_COUNTS))]
     counts = [CLASS_COUNTS[i] for i in range(len(CLASS_COUNTS))]
 
-    colors = []
-    for i, c in enumerate(counts):
-        if c < args.ultraRare_threshold:
-            colors.append(TIER_COLORS["ultra_rare"])
-        elif c < args.rare_threshold:
-            colors.append(TIER_COLORS["rare"])
-        else:
-            colors.append(TIER_COLORS["common"])
+    colors = [
+        TIER_COLORS["rare"] if c < args.rare_threshold else TIER_COLORS["common"]
+        for c in counts
+    ]
 
     order  = np.argsort(counts)
     names  = [names[i]  for i in order]
@@ -83,12 +78,10 @@ def plot_class_distribution(save_path=None):
     colors = [colors[i] for i in order]
 
     fig, ax = plt.subplots(figsize=(10, 12))
-    bars = ax.barh(names, counts, color=colors, edgecolor="white", linewidth=0.5)
+    ax.barh(names, counts, color=colors, edgecolor="white", linewidth=0.5)
     ax.set_xscale("log")
     ax.set_xlabel("Number of images (log scale)", fontsize=12)
     ax.set_title("GastroVision Class Distribution", fontsize=14, fontweight="bold")
-    ax.axvline(args.ultraRare_threshold, color=TIER_COLORS["ultra_rare"],
-               linestyle="--", alpha=0.7, label=f"Ultra-rare (<{args.ultraRare_threshold})")
     ax.axvline(args.rare_threshold, color=TIER_COLORS["rare"],
                linestyle="--", alpha=0.7, label=f"Rare (<{args.rare_threshold})")
     ax.legend(fontsize=10)
@@ -119,8 +112,8 @@ def plot_comparison_grid(synth_dir=None, n_classes=None, n_cols=3, save_path=Non
 
     df = pd.read_csv(train_csv)
 
-    # Pick classes to display: prefer ultra-rare + a few rare
-    display_classes = list(_config.ULTRA_RARE) + [c for c in _config.RARE_CLASSES if c not in _config.ULTRA_RARE]
+    # Pick classes to display: all rare classes (n < rare_threshold)
+    display_classes = list(_config.RARE_CLASSES)
     if n_classes:
         display_classes = display_classes[:n_classes]
     display_classes = [c for c in display_classes if len(df[df["label"] == c]) > 0]
@@ -252,15 +245,11 @@ def plot_per_class_f1(save_path=None):
         ax.bar(x + i * width, f1s, width, label=label,
                color=STRATEGY_COLORS.get(label, f"C{i}"), alpha=0.85)
 
-    # Shade rare classes
+    # Shade rare classes (orange background)
     for cls in _config.RARE_CLASSES:
         if cls < n_cls:
-            ax.axvspan(cls - 0.45, cls + 0.45, alpha=0.08,
+            ax.axvspan(cls - 0.45, cls + 0.45, alpha=0.10,
                        color="orange", zorder=0)
-    for cls in _config.ULTRA_RARE:
-        if cls < n_cls:
-            ax.axvspan(cls - 0.45, cls + 0.45, alpha=0.12,
-                       color="red", zorder=0)
 
     short_names = [n[:18] for n in CLASS_NAMES[:n_cls]]
     ax.set_xticks(x + width * (n_strat - 1) / 2)
@@ -268,13 +257,81 @@ def plot_per_class_f1(save_path=None):
     ax.set_ylabel("F1 Score", fontsize=12)
     ax.set_ylim(0, 1.15)
     ax.set_title("Per-class F1 Score by Strategy (ensemble)\n"
-                 "orange = rare, red = ultra-rare", fontsize=13)
+                 "orange background = rare class (n < 30)", fontsize=13)
     ax.legend(fontsize=10)
     ax.grid(axis="y", alpha=0.3)
     plt.tight_layout()
     plt.savefig(save_path, dpi=200, bbox_inches="tight")
     plt.close()
     print(f"  Figure 5 saved → {save_path}")
+    return save_path
+
+
+# ==============================================================================
+# Figure 6: Rare-class F1 deep-dive (S1 vs S2 vs S3, rare classes only)
+# ==============================================================================
+
+def plot_rare_class_f1(save_path=None):
+    """
+    Grouped bar chart showing per-class F1 for each RARE class only, comparing
+    S1 / S2 / S3 ensemble.  Designed to be the key figure for the rare-class
+    analysis section of the paper.
+    """
+    save_path = save_path or RESULTS_DIR / "fig6_rare_class_f1.png"
+
+    strategy_files = {
+        "S1: Real only":    RESULTS_DIR / "eval_results.json",
+        "S2: Heavy aug":    RESULTS_DIR / "eval_results_heavy.json",
+        "S3: SD synthetic": RESULTS_DIR / "eval_results_aug.json",
+    }
+
+    data = {}
+    for label, path in strategy_files.items():
+        if path.exists():
+            with open(path) as f:
+                res = json.load(f)
+            if "ensemble" in res:
+                data[label] = res["ensemble"]["f1"]
+
+    if not data or not _config.RARE_CLASSES:
+        print("  No eval results or no rare classes found — skipping Figure 6")
+        return
+
+    rare_idx   = sorted(_config.RARE_CLASSES)
+    rare_names = [CLASS_NAMES[c][:22] if c < len(CLASS_NAMES) else f"class_{c}"
+                  for c in rare_idx]
+
+    x       = np.arange(len(rare_idx))
+    n_strat = len(data)
+    width   = 0.8 / n_strat
+
+    fig, ax = plt.subplots(figsize=(max(12, len(rare_idx) * 1.4), 6))
+
+    for i, (label, f1s) in enumerate(data.items()):
+        vals = [f1s[c] if c < len(f1s) else 0.0 for c in rare_idx]
+        bars = ax.bar(x + i * width, vals, width,
+                      label=label, color=STRATEGY_COLORS.get(label, f"C{i}"), alpha=0.85)
+        # Annotate bar tops with value
+        for bar, v in zip(bars, vals):
+            if v > 0.02:
+                ax.text(bar.get_x() + bar.get_width() / 2, bar.get_height() + 0.015,
+                        f"{v:.2f}", ha="center", va="bottom", fontsize=7)
+
+    ax.set_xticks(x + width * (n_strat - 1) / 2)
+    ax.set_xticklabels(rare_names, rotation=35, ha="right", fontsize=9)
+    ax.set_ylabel("F1 Score", fontsize=12)
+    ax.set_ylim(0, 1.18)
+    ax.set_title(
+        f"Rare-Class F1 by Strategy — Ensemble (n < {args.rare_threshold})\n"
+        "Does SD-synthetic augmentation help rare class recognition?",
+        fontsize=12,
+    )
+    ax.legend(fontsize=10)
+    ax.grid(axis="y", alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=200, bbox_inches="tight")
+    plt.close()
+    print(f"  Figure 6 (rare-class F1) saved → {save_path}")
     return save_path
 
 
@@ -286,7 +343,7 @@ def plot_tsne(model, model_name: str, csv_path=None, save_path=None,
               n_samples: int = 1000):
     """
     t-SNE of penultimate-layer embeddings.
-    Rare and ultra-rare class points are plotted with distinct markers.
+    Rare class points are plotted with square markers; common with circles.
     """
     try:
         from sklearn.manifold import TSNE
@@ -369,7 +426,7 @@ def plot_tsne(model, model_name: str, csv_path=None, save_path=None,
         mask   = labels == cls
         if not mask.any():
             continue
-        marker = "^" if cls in _config.ULTRA_RARE else ("s" if cls in _config.RARE_CLASSES else "o")
+        marker = "s" if cls in _config.RARE_CLASSES else "o"
         size   = 80 if cls in _config.RARE_CLASSES else 30
         name   = CLASS_NAMES[cls][:15] if cls < len(CLASS_NAMES) else f"c{cls}"
         ax.scatter(emb[mask, 0], emb[mask, 1],
@@ -377,7 +434,7 @@ def plot_tsne(model, model_name: str, csv_path=None, save_path=None,
                    label=name, alpha=0.7, edgecolors="none")
 
     ax.set_title(f"t-SNE Feature Embeddings — {model_name}\n"
-                 "▲ = ultra-rare  ■ = rare  ● = common", fontsize=12)
+                 "■ = rare (n < 30)  ● = common", fontsize=12)
     ax.legend(bbox_to_anchor=(1.01, 1), loc="upper left", fontsize=7,
               markerscale=1.5, ncol=2)
     plt.tight_layout()
@@ -510,11 +567,12 @@ def plot_ablation_summary(save_path=None):
 def generate_all_figures(model=None, model_name: str = "efficientnetv2_rw_s"):
     """Call this once to regenerate all figures for the paper."""
     print("\nGenerating all paper figures...")
-    plot_class_distribution()
-    plot_comparison_grid()
-    plot_per_class_f1()
-    plot_fid_vs_f1()
-    plot_ablation_summary()
+    plot_class_distribution()      # Fig 1 — class distribution
+    plot_comparison_grid()         # Fig 3 — real / aug / synthetic grid
+    plot_per_class_f1()            # Fig 5 — all-class F1 bar chart
+    plot_rare_class_f1()           # Fig 6 — rare-class F1 deep-dive (new)
+    plot_fid_vs_f1()               # Fig 9 — FID vs F1 scatter
+    plot_ablation_summary()        # Fig 10 — ablation bar charts
     if model is not None:
-        plot_tsne(model, model_name)
+        plot_tsne(model, model_name)   # Fig 8 — t-SNE embeddings
     print("\nAll figures saved to:", RESULTS_DIR)
