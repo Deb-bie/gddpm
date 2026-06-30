@@ -251,6 +251,14 @@ HPARAMS = {
         "gamma": args.gamma, "freeze_lr_mult": 5.0,
         "weight_decay": args.weight_decay,
     },
+    # Ablation variant — same config as hybrid_cnn_transformer_v2
+    "hybrid_cnn_proj_only": {
+        "lr": args.lr * 0.67, "freeze_epochs": max(1, args.freeze_epochs - 8),
+        "fine_tune_epochs": args.fine_tune_epochs,
+        "batch_size": min(args.batch_size, 16),
+        "gamma": args.gamma, "freeze_lr_mult": 5.0,
+        "weight_decay": args.weight_decay,
+    },
 }
 
 # Cap batch sizes on ≤11GB GPUs
@@ -260,4 +268,5 @@ if torch.cuda.is_available() and torch.cuda.get_device_properties(0).total_memor
     HPARAMS["swin_v2"]["batch_size"] = 8
     HPARAMS["dinov2"]["batch_size"] = 8
     HPARAMS["hybrid_cnn_transformer_v2"]["batch_size"] = 8
+    HPARAMS["hybrid_cnn_proj_only"]["batch_size"] = 8
     print("  ⚠ ≤11GB VRAM detected — batch sizes capped")
