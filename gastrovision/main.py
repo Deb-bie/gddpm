@@ -145,6 +145,15 @@ def main():
         except Exception as _fe:
             print(f"  Model load for t-SNE failed ({_fe}) — generating figures without t-SNE")
             generate_all_figures()
+        # Reviewer experiments (hybrid ablation + synthetic-only) — run inside
+        # evaluate_only path so the job doesn't need to re-train S1/S2/S3 models.
+        if args.run_reviewer_experiments:
+            rev_path = RESULTS_DIR / "reviewer_experiments.json"
+            if not rev_path.exists():
+                print("\n" + "="*65 + "\nStep 8b: Reviewer experiments\n" + "="*65)
+                run_all_reviewer_experiments()
+            else:
+                print("\n  ✅ Reviewer experiments exist — skipping")
         return
 
     # ------------------------------------------------------------------
