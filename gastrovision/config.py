@@ -73,8 +73,10 @@ def parse_args():
     p.add_argument("--skip_generation",     action="store_true")
     p.add_argument("--skip_training",       action="store_true")
     p.add_argument("--evaluate_only",       action="store_true")
-    p.add_argument("--run_ablations",       action="store_true")
-    p.add_argument("--run_fewshot",         action="store_true")
+    p.add_argument("--run_ablations",             action="store_true")
+    p.add_argument("--run_reviewer_experiments",  action="store_true",
+                   help="Run HybridV2 internal ablation + synthetic-only experiment (reviewer response)")
+    p.add_argument("--run_fewshot",               action="store_true")
     p.add_argument("--tune",                action="store_true")
     p.add_argument("--tune_trials",         type=int,   default=15)
     p.add_argument("--tune_epochs",         type=int,   default=8)

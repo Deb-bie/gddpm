@@ -97,10 +97,53 @@ class CrossAttentionFusion(nn.Module):
         return torch.cat([a1, a2], dim=-1)
 
 
+class HybridCNNProjOnly(nn.Module):
+    """
+    Ablation variant: EfficientNetV2-S → 1×1 conv → mean-pool → linear head.
+    No Transformer encoder. Used to isolate the contribution of the Transformer
+    stage in HybridCNNTransformerV2.
+    """
+
+    def __init__(self, num_classes: int, cnn_name: str = "efficientnetv2_rw_s",
+                 transformer_dim: int = 512, dropout: float = 0.1, img_size: int = 224):
+        super().__init__()
+        self.cnn = timm.create_model(cnn_name, pretrained=True, features_only=True)
+        with torch.no_grad():
+            dummy = torch.zeros(1, 3, img_size, img_size)
+            last  = self.cnn(dummy)[-1]
+            cout  = last.shape[1]
+
+        self.cnn_proj = nn.Conv2d(cout, transformer_dim, 1)
+        self.norm = nn.LayerNorm(transformer_dim)
+        self.head = nn.Sequential(
+            nn.Dropout(dropout),
+            nn.Linear(transformer_dim, num_classes),
+        )
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        feat = self.cnn_proj(self.cnn(x)[-1])          # (B, D, H, W)
+        pooled = feat.flatten(2).mean(dim=2)            # (B, D) — mean over spatial tokens
+        return self.head(self.norm(pooled))
+
+    def freeze_backbones(self):
+        for p in self.cnn.parameters():
+            p.requires_grad = False
+
+    def unfreeze_all(self):
+        for p in self.parameters():
+            p.requires_grad = True
+
+    def get_features(self, x: torch.Tensor) -> torch.Tensor:
+        feat = self.cnn_proj(self.cnn(x)[-1])
+        return feat.flatten(2).mean(dim=2)
+
+
 class HybridCNNTransformerV2(nn.Module):
     """
-    Sequential: EfficientNetV2-S feature map → Transformer encoder.
+    Sequential: EfficientNetV2-S feature map → 1×1 conv → Transformer encoder.
     Custom architecture contribution — foreground in ensemble ablation.
+    Ablation chain: EfficientNetV2-S (CNN-only) → HybridCNNProjOnly (CNN+proj)
+                    → HybridCNNTransformerV2 (full hybrid, +Transformer).
     """
 
     def __init__(self, num_classes: int, cnn_name: str = "efficientnetv2_rw_s",
@@ -233,6 +276,8 @@ MODEL_REGISTRY = {
     "biomedclip":                lambda n: BiomedCLIPClassifier(n),
     "mobile":                    get_mobilenetv3,
     "hybrid_cnn_transformer_v2": lambda n: HybridCNNTransformerV2(n),
+    # Ablation variants (HybridV2 internal ablation for reviewer response)
+    "hybrid_cnn_proj_only":      lambda n: HybridCNNProjOnly(n),
 }
 
 

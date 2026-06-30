@@ -55,6 +55,7 @@ from ablation import (
 )
 from visualize import generate_all_figures
 from models   import load_checkpoint
+from reviewer_experiments import run_all_reviewer_experiments
 
 
 # ==============================================================================
@@ -304,6 +305,17 @@ def main():
             ablation_synth_count(best_model, train_csv, synth_csv_path, val_csv)
 
         print_ablation_summary()
+
+    # ------------------------------------------------------------------
+    # Step 8b: Reviewer experiments (hybrid ablation + synthetic-only)
+    # ------------------------------------------------------------------
+    if args.run_reviewer_experiments:
+        rev_path = RESULTS_DIR / "reviewer_experiments.json"
+        if not rev_path.exists():
+            print("\n" + "="*65 + "\nStep 8b: Reviewer experiments\n" + "="*65)
+            run_all_reviewer_experiments()
+        else:
+            print("\n  ✅ Reviewer experiments exist — skipping")
 
     # ------------------------------------------------------------------
     # Step 9: Final test set evaluation
