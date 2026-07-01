@@ -330,3 +330,19 @@ def run_all_reviewer_experiments():
     print(f"\nReviewer experiments saved to {out_path}")
 
     return results
+
+
+if __name__ == "__main__":
+    # Standalone entry-point — exec into the GPU pod and run directly:
+    #
+    #   kubectl exec -it <pod-name> -- bash
+    #   cd /opt/repo/gddpm
+    #   python gastrovision/reviewer_experiments.py \
+    #     --data_dir /data/gastrovision/data \
+    #     --output_dir /data/gastrovision \
+    #     --rare_threshold 30 --ultraRare_threshold 15 \
+    #     --freeze_epochs 20 --fine_tune_epochs 100 \
+    #     --batch_size 16
+    #
+    # config.NUM_CLASSES is inferred automatically from the first checkpoint loaded.
+    run_all_reviewer_experiments()
