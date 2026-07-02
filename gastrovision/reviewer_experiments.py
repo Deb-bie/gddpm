@@ -61,18 +61,32 @@ def run_hybrid_ablation():
 
     train_csv = SPLITS_DIR / args.train_csv
     val_csv   = SPLITS_DIR / args.val_csv
+    test_csv  = SPLITS_DIR / args.test_csv
     out = {}
+
+    # Build a test DataLoader (no augmentation, same pattern as evaluate.py)
+    from torch.utils.data import DataLoader as _DL
+    _test_ds  = GastroVisionDataset(test_csv, "val")   # "val" = no augmentation
+    _test_ldr = _DL(_test_ds, batch_size=args.batch_size, shuffle=False,
+                    num_workers=4, pin_memory=True)
+
+    def _eval(model):
+        """Run evaluate_split and return a dict with acc, macro_f1, rare_f1."""
+        from sklearn.metrics import f1_score as _f1
+        acc, yt, yp, _ = evaluate_split(model, _test_ldr)
+        f1_per_class    = _f1(yt, yp, average=None, zero_division=0,
+                              labels=list(range(_config.NUM_CLASSES)))
+        return {
+            "rare_f1":  _rare_f1(f1_per_class),
+            "macro_f1": float(f1_per_class.mean()),
+            "acc":      acc,
+        }
 
     # ── A: CNN-only ──────────────────────────────────────────────────────────
     print("\n[A] CNN-only: loading EfficientNetV2-S checkpoint")
     try:
         m = load_checkpoint("efficientnetv2_rw_s", suffix="")
-        res = evaluate_split(m, split="test")
-        out["cnn_only"] = {
-            "rare_f1":  _rare_f1(res["f1"]),
-            "macro_f1": float(np.mean(res["f1"])),
-            "acc":      res["acc"],
-        }
+        out["cnn_only"] = _eval(m)
         print(f"  rare_f1={out['cnn_only']['rare_f1']:.4f}  "
               f"macro_f1={out['cnn_only']['macro_f1']:.4f}")
         del m; torch.cuda.empty_cache()
@@ -85,12 +99,7 @@ def run_hybrid_ablation():
     try:
         train_classifier("hybrid_cnn_proj_only", train_csv, val_csv, augmented=False)
         m = load_checkpoint("hybrid_cnn_proj_only", suffix="")
-        res = evaluate_split(m, split="test")
-        out["cnn_proj_only"] = {
-            "rare_f1":  _rare_f1(res["f1"]),
-            "macro_f1": float(np.mean(res["f1"])),
-            "acc":      res["acc"],
-        }
+        out["cnn_proj_only"] = _eval(m)
         print(f"  rare_f1={out['cnn_proj_only']['rare_f1']:.4f}  "
               f"macro_f1={out['cnn_proj_only']['macro_f1']:.4f}")
         del m; torch.cuda.empty_cache()
@@ -102,12 +111,7 @@ def run_hybrid_ablation():
     print("\n[C] Full hybrid: loading HybridCNNTransformerV2 checkpoint")
     try:
         m = load_checkpoint("hybrid_cnn_transformer_v2", suffix="")
-        res = evaluate_split(m, split="test")
-        out["full_hybrid"] = {
-            "rare_f1":  _rare_f1(res["f1"]),
-            "macro_f1": float(np.mean(res["f1"])),
-            "acc":      res["acc"],
-        }
+        out["full_hybrid"] = _eval(m)
         print(f"  rare_f1={out['full_hybrid']['rare_f1']:.4f}  "
               f"macro_f1={out['full_hybrid']['macro_f1']:.4f}")
         del m; torch.cuda.empty_cache()
