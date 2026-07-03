@@ -70,6 +70,20 @@ def run_hybrid_ablation():
     _test_ldr = _DL(_test_ds, batch_size=args.batch_size, shuffle=False,
                     num_workers=4, pin_memory=True)
 
+    # If running standalone, RARE_CLASSES / ULTRA_RARE may be empty — populate
+    # from CLASS_COUNTS using the same threshold logic as split creation.
+    if not _config.RARE_CLASSES:
+        _config.RARE_CLASSES = sorted(
+            [c for c, n in _config.CLASS_COUNTS.items()
+             if n < args.rare_threshold]
+        )
+    if not _config.ULTRA_RARE:
+        _config.ULTRA_RARE = sorted(
+            [c for c, n in _config.CLASS_COUNTS.items()
+             if n < args.ultraRare_threshold]
+        )
+    print(f"  RARE_CLASSES={_config.RARE_CLASSES}  ULTRA_RARE={_config.ULTRA_RARE}")
+
     def _eval(model):
         """Run evaluate_split and return a dict with acc, macro_f1, rare_f1."""
         from sklearn.metrics import f1_score as _f1
@@ -97,7 +111,11 @@ def run_hybrid_ablation():
     # ── B: CNN + proj (no Transformer) ───────────────────────────────────────
     print("\n[B] CNN+proj: training HybridCNNProjOnly...")
     try:
-        train_classifier("hybrid_cnn_proj_only", train_csv, val_csv, augmented=False)
+        ckpt_b = CKPT_DIR / "sota_hybrid_cnn_proj_only.pt"
+        if ckpt_b.exists():
+            print("  Checkpoint exists — skipping training")
+        else:
+            train_classifier("hybrid_cnn_proj_only", train_csv, val_csv, augmented=False)
         m = load_checkpoint("hybrid_cnn_proj_only", suffix="")
         out["cnn_proj_only"] = _eval(m)
         print(f"  rare_f1={out['cnn_proj_only']['rare_f1']:.4f}  "
