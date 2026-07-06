@@ -114,6 +114,13 @@ def get_splits(data_dir, size: int = 224) -> tuple[pd.DataFrame, pd.DataFrame, p
     data_dir = Path(data_dir)
     materialized_dir = data_dir / "pathmnist_materialized"
 
+    # medmnist's own default root (~/.medmnist) auto-creates itself, but a
+    # CUSTOM root (what we pass here, so downloads land on the PVC instead
+    # of the ephemeral container home dir) is NOT auto-created by medmnist —
+    # recent versions raise RuntimeError("Failed to setup the default `root`
+    # directory...") if it doesn't already exist. Create it ourselves first.
+    data_dir.mkdir(parents=True, exist_ok=True)
+
     splits = {}
     for split_name in ("train", "val", "test"):
         ds = PathMNIST(split=split_name, download=True, size=size, root=str(data_dir))
