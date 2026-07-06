@@ -111,6 +111,20 @@ def parse_args():
                    help="Matches gastrovision job.yaml's --image_root, relative "
                         "to --gastrovision_data_dir")
 
+    # HAM10000 / PathMNIST: normally live at <data_dir>/<dataset_name>, but
+    # PVC layouts don't always follow that convention (e.g. HAM10000 placed
+    # under gastrovision's own data tree at a nested path) — these overrides
+    # let you point at wherever the raw archive/metadata actually landed,
+    # same escape hatch --gastrovision_data_dir gives GastroVision above.
+    p.add_argument("--ham10000_data_dir", default=None,
+                   help="Directory containing HAM10000_metadata.csv and the "
+                        "HAM10000_images_part_1/2 folders. Defaults to "
+                        "<data_dir>/ham10000 if not given.")
+    p.add_argument("--pathmnist_data_dir", default=None,
+                   help="Directory medmnist's PathMNIST download/cache should "
+                        "use as its root. Defaults to <data_dir>/pathmnist "
+                        "if not given.")
+
     # Scope
     p.add_argument("--datasets",  nargs="+", default=list(DATASETS))
     p.add_argument("--backbones", nargs="+", default=list(BACKBONES))

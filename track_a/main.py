@@ -72,7 +72,12 @@ def run_dataset(dataset_name: str):
         # HAM10000 / PathMNIST: raw data (or medmnist's download target)
         # lives under Track A's own DATA_DIR, NOT under OUTPUT_DIR — keeps
         # input dataset storage separate from generated checkpoints/results.
-        image_root = DATA_DIR / dataset_name
+        # Per-dataset overrides (--ham10000_data_dir / --pathmnist_data_dir)
+        # take precedence when the PVC layout doesn't follow the
+        # DATA_DIR/<dataset_name> convention (e.g. HAM10000 nested under
+        # gastrovision's own data tree).
+        override = {"ham10000": args.ham10000_data_dir, "pathmnist": args.pathmnist_data_dir}.get(dataset_name)
+        image_root = Path(override) if override else DATA_DIR / dataset_name
         train_df, val_df, test_df = ds.get_splits(image_root)
 
     num_classes = len(ds.CLASS_NAMES)
