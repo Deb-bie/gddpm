@@ -52,3 +52,7 @@ open_clip_torch>=2.20.0
 
 # ── Optional XAI (graceful fallback if install fails) ─────────────────────────
 shap>=0.43
+
+# ── Track A additions (multi-dataset diffusion-augmentation-failure study) ────
+# medmnist — PathMNIST loader (track_a/datasets/pathmnist.py), size=224 patches
+medmnist>=3.0.0

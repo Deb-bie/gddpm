@@ -76,6 +76,14 @@ def parse_args():
     p.add_argument("--run_ablations",             action="store_true")
     p.add_argument("--run_reviewer_experiments",  action="store_true",
                    help="Run HybridV2 internal ablation + synthetic-only experiment (reviewer response)")
+    p.add_argument("--run_lora_rank_sweep",       action="store_true",
+                   help="Sweep LoRA ranks {8,16,32}: domain-adapt → generate → train S3 → val rare-F1")
+    p.add_argument("--run_multi_seed",            action="store_true",
+                   help="Run DINOv2 S1+S3 with seeds {42,123,456} for stability reporting")
+    p.add_argument("--multi_seed_model",          type=str, default="dino_vit_base",
+                   help="Model name to use for multi-seed experiment")
+    p.add_argument("--run_low_synth_count",       action="store_true",
+                   help="Run synthetic count ablation at 10, 20, 50, 100, 250, 500 images per class")
     p.add_argument("--run_fewshot",               action="store_true")
     p.add_argument("--tune",                action="store_true")
     p.add_argument("--tune_trials",         type=int,   default=15)
