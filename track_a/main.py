@@ -80,6 +80,16 @@ def run_dataset(dataset_name: str):
         image_root = Path(override) if override else DATA_DIR / dataset_name
         train_df, val_df, test_df = ds.get_splits(image_root)
 
+    # val/test are never perturbed with synthetic data — always real images
+    # only (see train_one_condition's docstring) — but none of the three
+    # dataset loaders' get_splits() stamp a `source` column (only
+    # build_condition_df does, and only for the training set it builds per
+    # cell). TrackAClassifierDataset requires `source` on every df it
+    # wraps, so without this val/test crash with KeyError('source') the
+    # first time anything actually evaluates against them.
+    val_df = val_df.copy();   val_df["source"] = "real"
+    test_df = test_df.copy(); test_df["source"] = "real"
+
     num_classes = len(ds.CLASS_NAMES)
     print(f"  {dataset_name}: train={len(train_df)} val={len(val_df)} test={len(test_df)} "
           f"classes={num_classes}  sweep_classes={ds.SWEEP_CLASSES}")
