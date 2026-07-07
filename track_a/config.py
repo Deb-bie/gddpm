@@ -97,7 +97,7 @@ def parse_args():
     p.add_argument("--data_dir",   default="/data")
     p.add_argument("--output_dir", default="/output/track_a")
 
-    # GastroVision is a special case: it reuses the EXISTING gastrovision/
+    # GastroVision is a special case: it reuses the astrovision/
     # pipeline's splits and image root rather than regenerating them (see
     # track_a/datasets/gastrovision.py's module docstring), so it needs its
     # own paths matching job.yaml's conventions for that pipeline, which are
