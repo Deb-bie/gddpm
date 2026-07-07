@@ -71,14 +71,40 @@ NATURALLY_RARE = []
 SWEEP_CLASSES = [8, 7]   # TUM, STR
 
 
+def _is_valid_image(path: Path) -> bool:
+    """Cheap integrity check (no full pixel decode) — catches the truncated/
+    zero-byte files a killed process can leave behind mid-write."""
+    try:
+        with Image.open(path) as im:
+            im.verify()
+        return True
+    except Exception:
+        return False
+
+
 def _materialize_split(medmnist_ds, split_name: str, out_dir: Path) -> pd.DataFrame:
     """
     Writes each image in a medmnist split to PNG once (idempotent — skips
-    files that already exist), and returns the resulting image_path/label/
-    class_name DataFrame. Materializing to disk keeps this loader's output
-    schema identical to GastroVision's and HAM10000's (image_path column,
-    consumed by the same downstream Dataset/generation code) rather than
-    threading PIL Image objects or numpy arrays through a separate code path.
+    files that already exist AND pass an integrity check), and returns the
+    resulting image_path/label/class_name DataFrame. Materializing to disk
+    keeps this loader's output schema identical to GastroVision's and
+    HAM10000's (image_path column, consumed by the same downstream Dataset/
+    generation code) rather than threading PIL Image objects or numpy
+    arrays through a separate code path.
+
+    Two failure modes this guards against, both observed in practice when a
+    run got killed mid-materialization (OOM, node eviction, crash):
+      1. A previous save() was interrupted partway through, leaving a
+         corrupt/truncated file at the final path. Since existence alone
+         used to be the "already done" check, that corrupt file would be
+         skipped forever and fail every downstream read (PIL
+         UnidentifiedImageError) on every future run. _is_valid_image()
+         catches this and triggers a rewrite.
+      2. THIS run gets killed mid-save. Writing to a temp path first and
+         atomically renaming it into place (os.replace, same filesystem)
+         means the final path only ever exists in a complete, valid state —
+         a kill mid-write leaves an orphaned .tmp file, never a corrupt
+         file at the real path.
     """
     split_dir = out_dir / split_name
     split_dir.mkdir(parents=True, exist_ok=True)
@@ -87,18 +113,31 @@ def _materialize_split(medmnist_ds, split_name: str, out_dir: Path) -> pd.DataFr
     labels = medmnist_ds.labels.squeeze(-1) if medmnist_ds.labels.ndim > 1 else medmnist_ds.labels
 
     rows = []
+    n_repaired = 0
     for i in range(len(imgs)):
         label = int(labels[i])
         cls_dir = split_dir / str(label)
         cls_dir.mkdir(exist_ok=True)
         path = cls_dir / f"{split_name}_{i:06d}.png"
-        if not path.exists():
-            Image.fromarray(imgs[i]).save(path)
+
+        needs_write = not path.exists()
+        if not needs_write and not _is_valid_image(path):
+            needs_write = True
+            n_repaired += 1
+
+        if needs_write:
+            tmp_path = path.with_name(path.name + ".tmp")
+            Image.fromarray(imgs[i]).save(tmp_path, format="PNG")
+            tmp_path.replace(path)  # atomic on the same filesystem
+
         rows.append({
             "image_path": str(path.relative_to(out_dir.parent)),
             "label": label,
             "class_name": CLASS_NAMES[label],
         })
+
+    if n_repaired:
+        print(f"  {split_name}: repaired {n_repaired} corrupt/truncated image(s) from a previous interrupted run")
     return pd.DataFrame(rows)
 
 
