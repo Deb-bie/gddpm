@@ -310,8 +310,19 @@ def build_condition_df(all_train_df: pd.DataFrame, label_col: str, target_class,
     if condition == "synth_only":
         if synth_pool_df is not None and len(synth_pool_df) > 0:
             target_synth = synth_pool_df[synth_pool_df[label_col] == target_class].copy()
-            if "source" not in target_synth.columns:
-                target_synth["source"] = "synth_sd"
+            # Always stamp explicitly, same reasoning as the sd_lora_synth/
+            # dcgan_synth branch below — do NOT special-case "only if
+            # missing". generate_synthetic_for_classes() already writes a
+            # `source` column into its CSV, but stamped "sd_lora_ema" (its
+            # own internal provenance label), not "synth_sd" (the key
+            # TrackAClassifierDataset's `roots` dict actually uses). Since
+            # the column isn't missing, the old `if "source" not in
+            # columns` guard silently let "sd_lora_ema" through instead of
+            # correcting it, causing KeyError('sd_lora_ema') the first time
+            # any synth_only cell reached the DataLoader. main.py's Step 8
+            # always sources synth_only from sd_pool_main, never the DCGAN
+            # pool, so "synth_sd" is always the correct target here.
+            target_synth["source"] = "synth_sd"
             rows.append(target_synth)
         return pd.concat(rows, ignore_index=True)
 
