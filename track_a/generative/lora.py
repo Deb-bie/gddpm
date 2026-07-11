@@ -207,9 +207,20 @@ def domain_adapt_sd(dataset_name: str, train_df, data_dir, ckpt_dir, results_dir
                 "losses":     losses, "ema": ema.state_dict(),
             }, resume_path)
 
-    torch.save(unet.state_dict(), ckpt_dir / f"{adapter_name}.pt")
     unet.save_pretrained(ckpt_dir / f"{adapter_name}_adapter")
     ema.save_adapter(unet, ema_path)
+
+    # Free the periodic resume checkpoint now that training finished —
+    # nothing needs it once ema_path exists (that's the only file
+    # generate_synthetic_for_classes() or any resume check ever reads back;
+    # see its `if ema_path.exists(): skip` guard above). Previously this
+    # was never deleted, so every rank's ~1.4GB mid-training snapshot sat
+    # on disk forever after that rank finished — across a 5-rank ablation
+    # sweep that's several GB of pure dead weight, directly contributing to
+    # the disk-space exhaustion that crashed rank 128's checkpoint write
+    # (torch.save failing partway through with a truncated-file error).
+    if resume_path.exists():
+        resume_path.unlink()
 
     final = losses[-1] if losses else float("nan")
     print(f"\nDomain adaptation done [{dataset_name} r{rank}] — final loss: {final:.4f}")
