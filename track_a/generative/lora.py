@@ -302,8 +302,29 @@ def generate_synthetic_for_classes(dataset_name: str, ckpt_dir, out_dir,
 
     for cls in classes:
         cls_name = class_names.get(cls, f"class_{cls}")
-        cls_dir  = out_dir / str(cls)
+        cls_dir  = out_dir / str(cls) / f"r{rank}"
         cls_dir.mkdir(parents=True, exist_ok=True)
+
+        # One-time migration for pre-existing pools generated BEFORE this
+        # fix: every rank used to write into a shared, non-rank-specific
+        # folder (out_dir/{cls}/synth_*.png), so any rank OTHER than
+        # whichever one ran first silently found that folder "already
+        # complete" and skipped generating its own images entirely —
+        # producing identical images (and identical KID) across every rank
+        # in an ablation run. A plain (non-ablation) main.py invocation
+        # only ever generates ONE rank (args.lora_rank), so any pre-existing
+        # flat-layout images can only legitimately belong to that rank —
+        # migrate them into its new namespaced folder rather than
+        # wastefully regenerating already-good work. Every OTHER rank gets
+        # an honestly empty folder here and generates for real.
+        legacy_flat_dir = out_dir / str(cls)
+        if rank == args.lora_rank and not any(cls_dir.glob("synth_*.png")):
+            legacy_images = sorted(legacy_flat_dir.glob("synth_*.png"))
+            if len(legacy_images) >= samples_per_class:
+                print(f"  [{dataset_name} r{rank}] migrating {len(legacy_images)} pre-existing "
+                      f"class {cls} images into rank-specific folder (one-time)")
+                for p in legacy_images:
+                    p.rename(cls_dir / p.name)
 
         prompt = domain_prefix + class_prompts.get(cls, f"medical image, {cls_name}")
 
