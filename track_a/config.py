@@ -193,6 +193,17 @@ def parse_args():
     p.add_argument("--run_ratio_ablation",     action="store_true",
                    help="Run the RQ_A5 synthetic:real ratio ablation at "
                         "ABLATION_N_ANCHORS (track_a/ratio_ablation.py)")
+    p.add_argument("--save_classifier_checkpoints", action="store_true",
+                   help="Write each cell's trained classifier weights to disk "
+                        "(dirs['checkpoints']/{cell_tag}.pt). OFF by default — "
+                        "nothing in analysis.py/kid_screening.py/rank_analysis.py/"
+                        "multiseed.py/ratio_ablation.py ever reads a classifier "
+                        "checkpoint back (only the JSON + .preds.npz each cell "
+                        "also writes), so across the full n-grid x condition x "
+                        "backbone matrix this was hundreds of unused files eating "
+                        "disk space for nothing. Only turn on for a narrow re-run "
+                        "when you actually need loaded model weights (e.g. "
+                        "mechanistic.py's GradCAM/feature-extraction analysis).")
     p.add_argument("--run_multiseed",          action="store_true",
                    help="Retrain the 3 headline findings (crossover n*, ratio "
                         "curve at n=16, KID-DeltaF1 rho) at extra seeds beyond "

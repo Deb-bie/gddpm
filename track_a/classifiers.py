@@ -459,9 +459,25 @@ def train_one_condition(backbone_name: str, train_df: pd.DataFrame, val_df: pd.D
         print(f"  [{backbone_name}] finetune ep {ep+1}/{cfg['fine_tune_epochs']}  val_acc={acc:.4f}")
 
     if best_state is not None:
+        # Reload into memory regardless — this is what makes the final
+        # eval below (and the JSON it produces) reflect the BEST epoch
+        # rather than whatever the last one happened to be. Writing that
+        # state to DISK is a separate, opt-in decision (--save_classifier_
+        # checkpoints, default off): nothing in analysis.py, kid_screening.py,
+        # rank_analysis.py, multiseed.py, or ratio_ablation.py ever reads a
+        # classifier .pt back — everything downstream works off the JSON +
+        # .preds.npz this function already writes. Across the full n-grid x
+        # condition x backbone matrix (plus rank/ratio/pretrain-only/
+        # multiseed add-ons), that's potentially hundreds of unused
+        # checkpoints — a much larger version of the exact disk-exhaustion
+        # pattern already found and fixed in generative/lora.py's per-rank
+        # full-UNet dump. Only turn this on for a deliberately narrow re-run
+        # (e.g. a handful of cells needed for mechanistic.py's GradCAM/
+        # feature-extraction analysis), not the whole matrix.
         model.load_state_dict(best_state)
-        ckpt_path.parent.mkdir(parents=True, exist_ok=True)
-        torch.save(best_state, ckpt_path)
+        if getattr(args, "save_classifier_checkpoints", False):
+            ckpt_path.parent.mkdir(parents=True, exist_ok=True)
+            torch.save(best_state, ckpt_path)
 
     acc, yt, yp, pr = _eval_loader(model, vl, device)
     _, _, f1, _ = precision_recall_fscore_support(
@@ -601,9 +617,25 @@ def train_pretrain_only_condition(backbone_name: str, stage1_df: pd.DataFrame, s
         print(f"  [{backbone_name}] stage2/finetune ep {ep+1}/{cfg['fine_tune_epochs']}  val_acc={acc:.4f}")
 
     if best_state is not None:
+        # Reload into memory regardless — this is what makes the final
+        # eval below (and the JSON it produces) reflect the BEST epoch
+        # rather than whatever the last one happened to be. Writing that
+        # state to DISK is a separate, opt-in decision (--save_classifier_
+        # checkpoints, default off): nothing in analysis.py, kid_screening.py,
+        # rank_analysis.py, multiseed.py, or ratio_ablation.py ever reads a
+        # classifier .pt back — everything downstream works off the JSON +
+        # .preds.npz this function already writes. Across the full n-grid x
+        # condition x backbone matrix (plus rank/ratio/pretrain-only/
+        # multiseed add-ons), that's potentially hundreds of unused
+        # checkpoints — a much larger version of the exact disk-exhaustion
+        # pattern already found and fixed in generative/lora.py's per-rank
+        # full-UNet dump. Only turn this on for a deliberately narrow re-run
+        # (e.g. a handful of cells needed for mechanistic.py's GradCAM/
+        # feature-extraction analysis), not the whole matrix.
         model.load_state_dict(best_state)
-        ckpt_path.parent.mkdir(parents=True, exist_ok=True)
-        torch.save(best_state, ckpt_path)
+        if getattr(args, "save_classifier_checkpoints", False):
+            ckpt_path.parent.mkdir(parents=True, exist_ok=True)
+            torch.save(best_state, ckpt_path)
 
     acc, yt, yp, pr = _eval_loader(model, vl, device)
     _, _, f1, _ = precision_recall_fscore_support(
